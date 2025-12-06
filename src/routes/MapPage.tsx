@@ -38,18 +38,10 @@ function createBenchPhotoIcon(url: string) {
   return divIcon({
     className: "bench-photo-marker",
     html: `
-      <div style="
-        width: 40px;
-        height: 40px;
-        border-radius: 12px;
-        border: 2px solid #ffffff;
-        box-shadow: 0 0 0 2px rgba(15,23,42,0.9);
-        overflow: hidden;
-        background: #e5e7eb;
-      ">
+      <div class="w-10 h-10 rounded-[12px] border-2 border-white shadow-[0_0_0_2px_rgba(15,23,42,0.9)] overflow-hidden bg-slate-200">
         <img
           src="${url}"
-          style="width: 100%; height: 100%; object-fit: cover; display: block;"
+          class="w-full h-full object-cover block"
         />
       </div>
     `,
@@ -429,26 +421,21 @@ export function MapPage() {
           title: row.title,
           description: row.description,
           mainPhotoUrl: row.main_photo_url,
+          status: row.status,
+        }))
       );
+    })();
 
-    if (error || !data || cancelled) {
-      return;
-    }
+    return () => {
+      cancelled = true;
+    };
+  }, [setBenches]);
 
-    const rows = data as BenchRow[];
+  const mapCenter = center;
 
-    setBenches(
-      rows.map((row) => ({
-        id: row.id,
-        latitude: row.latitude,
-        longitude: row.longitude,
-        title: row.title,
-        description: row.description,
-        mainPhotoUrl: row.main_photo_url,
-        status: row.status,
-      }))
-    );
-  })();
+  return (
+    <div className="relative h-dvh w-dvw overflow-hidden bg-slate-950">
+      <MapContainer
         center={mapCenter}
         zoom={14}
         scrollWheelZoom
