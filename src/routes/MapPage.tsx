@@ -98,6 +98,7 @@ export function MapPage() {
   const [draftDescription, setDraftDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [mapStyle, setMapStyle] = useState<"normal" | "satellite">("normal");
   const mapRef = useRef<LeafletMap | null>(null);
   const selectFileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -330,6 +331,15 @@ export function MapPage() {
     });
   };
 
+  const handleRecenterOnUser = () => {
+    if (!userLocation || !mapRef.current) return;
+    mapRef.current.setView(userLocation as any, mapRef.current.getZoom());
+  };
+
+  const handleToggleMapStyle = () => {
+    setMapStyle((prev) => (prev === "normal" ? "satellite" : "normal"));
+  };
+
   useEffect(() => {
     const nav = navigator as Navigator & { geolocation?: Geolocation };
 
@@ -442,10 +452,17 @@ export function MapPage() {
         className="z-0 h-full w-full"
         ref={mapRef}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        />
+        {mapStyle === "normal" ? (
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png"
+          />
+        ) : (
+          <TileLayer
+            attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          />
+        )}
 
         {userLocation && <Marker position={userLocation} icon={userIcon} />}
 
@@ -464,31 +481,74 @@ export function MapPage() {
             }
           >
             <Popup>
-              <div className="text-sm font-medium">
-                {bench.title || "Bench"}
+              <div className="flex max-w-[220px] flex-col gap-2">
+                {bench.mainPhotoUrl && (
+                  <div className="overflow-hidden rounded-lg border border-slate-200 shadow-sm">
+                    <img
+                      src={bench.mainPhotoUrl}
+                      alt={bench.description ?? "Bench"}
+                      className="block h-32 w-full object-cover"
+                    />
+                  </div>
+                )}
+                {bench.description && (
+                  <div className="text-xs text-slate-800">
+                    {bench.description}
+                  </div>
+                )}
+                {isAdmin && (
+                  <div
+                    className={`mt-1 inline-flex self-start rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      bench.status === "approved"
+                        ? "bg-emerald-500/15 text-emerald-300"
+                        : bench.status === "pending"
+                        ? "bg-amber-500/15 text-amber-300"
+                        : "bg-rose-500/15 text-rose-300"
+                    }`}
+                  >
+                    {bench.status}
+                  </div>
+                )}
               </div>
-              {bench.description && (
-                <div className="mt-1 text-xs text-slate-700">
-                  {bench.description}
-                </div>
-              )}
-              {isAdmin && (
-                <div
-                  className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    bench.status === "approved"
-                      ? "bg-emerald-500/15 text-emerald-300"
-                      : bench.status === "pending"
-                      ? "bg-amber-500/15 text-amber-300"
-                      : "bg-rose-500/15 text-rose-300"
-                  }`}
-                >
-                  {bench.status}
-                </div>
-              )}
             </Popup>
           </Marker>
         ))}
       </MapContainer>
+
+      {/* Map style + recenter controls */}
+      <div className="pointer-events-none absolute right-3 top-24 z-[1000] flex flex-col items-end gap-2">
+        {/* Circular Map / Satellite toggle button */}
+        <button
+          type="button"
+          onClick={handleToggleMapStyle}
+          className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-md shadow-slate-900/40 hover:bg-slate-50"
+        >
+          {mapStyle === "normal" ? (
+            <span className="flex h-6 w-6 items-center justify-center rounded-sm border border-slate-300 bg-slate-100">
+              <span className="h-3 w-4 rounded-[2px] bg-sky-400" />
+            </span>
+          ) : (
+            <span className="grid h-6 w-6 grid-cols-2 gap-[1px] rounded-sm border border-slate-300 bg-slate-100">
+              <span className="bg-slate-200" />
+              <span className="bg-slate-400" />
+              <span className="bg-slate-500" />
+              <span className="bg-slate-700" />
+            </span>
+          )}
+        </button>
+
+        {userLocation && (
+          <button
+            type="button"
+            onClick={handleRecenterOnUser}
+            className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-md shadow-slate-900/40 hover:bg-slate-50"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-400">
+              <span className="h-2 w-2 rounded-full bg-sky-500" />
+            </span>
+          </button>
+        )}
+      </div>
 
       {/* Top iOS-like title bar */}
       <MapHeader />
