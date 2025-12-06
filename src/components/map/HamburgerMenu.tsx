@@ -2,6 +2,7 @@ import { useMapUiStore } from "../../store/useMapUiStore";
 
 export type HamburgerMenuProps = {
   isSignedIn: boolean;
+  isAdmin: boolean;
   openSignIn: () => void;
   handleSignOut: () => void;
   onGoToAdmin: () => void;
@@ -9,6 +10,7 @@ export type HamburgerMenuProps = {
 
 export function HamburgerMenu({
   isSignedIn,
+  isAdmin,
   openSignIn,
   handleSignOut,
   onGoToAdmin,
@@ -50,35 +52,26 @@ export function HamburgerMenu({
                 </button>
               )}
 
-              {isSignedIn && (
-                <>
-                  <button
-                    type="button"
-                    className="flex items-center justify-between rounded-2xl bg-slate-800/90 px-3 py-2 text-slate-100 active:scale-[0.98]"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onGoToAdmin();
-                    }}
-                  >
-                    <span>Admin panel</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="flex items-center justify-between rounded-2xl bg-slate-800/90 px-3 py-2 text-slate-100 active:scale-[0.98]"
-                    onClick={handleSignOut}
-                  >
-                    <span>Sign out</span>
-                  </button>
-                </>
-              )}
-
-              {!isSignedIn && (
+              {isSignedIn && isAdmin && (
                 <button
                   type="button"
-                  className="flex items-center justify-between rounded-2xl border border-slate-800/60 px-3 py-2 text-slate-500 cursor-not-allowed"
-                  aria-disabled="true"
+                  className="flex items-center justify-between rounded-2xl bg-slate-800/90 px-3 py-2 text-slate-100 active:scale-[0.98]"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onGoToAdmin();
+                  }}
                 >
                   <span>Admin panel</span>
+                </button>
+              )}
+
+              {isSignedIn && (
+                <button
+                  type="button"
+                  className="flex items-center justify-between rounded-2xl bg-slate-800/90 px-3 py-2 text-slate-100 active:scale-[0.98]"
+                  onClick={handleSignOut}
+                >
+                  <span>Sign out</span>
                 </button>
               )}
             </div>

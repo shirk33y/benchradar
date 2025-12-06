@@ -25,6 +25,7 @@ type BenchRow = {
   description: string | null;
   main_photo_url: string | null;
   status: "pending" | "approved" | "rejected";
+  created_by: string;
 };
 
 const approvedIcon = divIcon({
@@ -98,6 +99,7 @@ export function MapPage() {
   const [draftDescription, setDraftDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [editingBench, setEditingBench] = useState<Bench | null>(null);
   const [mapStyle, setMapStyle] = useState<"normal" | "satellite">("normal");
   const mapRef = useRef<LeafletMap | null>(null);
   const selectFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -147,6 +149,171 @@ export function MapPage() {
     setAddMode("details");
   };
 
+  const handleEditSubmit = async () => {
+    if (!editingBench) return;
+
+    if (!user) {
+      openSignIn();
+      return;
+    }
+
+    const baseLatLng: [number, number] = [
+      editingBench.latitude,
+      editingBench.longitude,
+    ];
+
+    const [lat, lng] =
+      chosenLocation && Array.isArray(chosenLocation)
+        ? (chosenLocation as [number, number])
+        : baseLatLng;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const uploadedUrls: string[] = [];
+      let mainPhotoUrl = editingBench.mainPhotoUrl ?? null;
+
+      if (pendingFiles && pendingFiles.length > 0) {
+        for (const file of pendingFiles) {
+          const compressed = await compressImage(file, {
+            maxSizeMB: 2,
+            maxWidthOrHeight: 1920,
+            useWebWorker: true,
+          });
+
+          const extFromType =
+            compressed.type === "image/webp"
+              ? "webp"
+              : compressed.type === "image/jpeg"
+              ? "jpg"
+              : undefined;
+
+          const fallbackExt = file.name.includes(".")
+            ? file.name.split(".").pop() || "jpg"
+            : "jpg";
+
+          const ext = extFromType ?? fallbackExt;
+
+          const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from("bench_photos")
+            .upload(path, compressed, {
+              contentType: compressed.type,
+              upsert: false,
+            });
+
+          if (uploadError) {
+            setSubmitError("Uploading photos failed. Please try again.");
+            return;
+          }
+
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from("bench_photos").getPublicUrl(path);
+
+          uploadedUrls.push(publicUrl);
+        }
+
+        if (uploadedUrls.length > 0) {
+          mainPhotoUrl = uploadedUrls[0];
+        }
+      }
+
+      const updates: Record<string, unknown> = {
+        latitude: lat,
+        longitude: lng,
+        description: draftDescription || null,
+      };
+
+      if (mainPhotoUrl !== editingBench.mainPhotoUrl) {
+        updates.main_photo_url = mainPhotoUrl;
+      }
+
+      const { error: benchError } = await supabase
+        .from("benches")
+        .update(updates)
+        .eq("id", editingBench.id);
+
+      if (benchError) {
+        setSubmitError("Saving bench failed. Please try again.");
+        return;
+      }
+
+      if (uploadedUrls.length > 0) {
+        const photoRows = uploadedUrls.map((url, index) => ({
+          bench_id: editingBench.id,
+          url,
+          is_main: index === 0,
+        }));
+
+        await supabase.from("bench_photos").insert(photoRows);
+      }
+
+      setBenches(
+        benches.map((b) =>
+          b.id === editingBench.id
+            ? {
+                ...b,
+                latitude: lat,
+                longitude: lng,
+                description: draftDescription || null,
+                mainPhotoUrl,
+              }
+            : b
+        )
+      );
+
+      setAddMode("idle");
+      setEditingBench(null);
+      setPendingFiles(null);
+      setDraftDescription("");
+      setChosenLocation(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteBench = async (bench: Bench) => {
+    if (!user) {
+      openSignIn();
+      return;
+    }
+
+    if (!isAdmin && bench.createdBy && bench.createdBy !== user.id) {
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      "Delete this bench? This cannot be undone."
+    );
+    if (!confirmDelete) return;
+
+    const { error: photosError } = await supabase
+      .from("bench_photos")
+      .delete()
+      .eq("bench_id", bench.id);
+
+    const { error: benchError } = await supabase
+      .from("benches")
+      .delete()
+      .eq("id", bench.id);
+
+    if (photosError || benchError) {
+      window.alert("Deleting bench failed. Please try again.");
+      return;
+    }
+
+    setBenches(benches.filter((b) => b.id !== bench.id));
+    setAddMode("idle");
+    setEditingBench(null);
+    setPendingFiles(null);
+    setDraftDescription("");
+    setChosenLocation(null);
+    setSubmitError(null);
+  };
+
   const openSignIn = () => {
     setAuthError(null);
     setAuthEmail("");
@@ -162,7 +329,7 @@ export function MapPage() {
     setMenuOpen(false);
   };
 
-  const handleAuthSubmit = async (e: any) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError(null);
@@ -180,6 +347,24 @@ export function MapPage() {
     }
 
     setAuthLoading(false);
+  };
+
+  const startEditingBench = (bench: Bench) => {
+    if (!user) {
+      openSignIn();
+      return;
+    }
+
+    if (!isAdmin && bench.createdBy && bench.createdBy !== user.id) {
+      return;
+    }
+
+    setEditingBench(bench);
+    setDraftDescription(bench.description ?? "");
+    setChosenLocation([bench.latitude, bench.longitude]);
+    setPendingFiles(null);
+    setSubmitError(null);
+    setAddMode("details");
   };
 
   const handleChooseLocation = () => {
@@ -204,7 +389,7 @@ export function MapPage() {
     });
   };
 
-  const handleSubmit = async () => {
+  const handleCreateSubmit = async () => {
     if (!pendingFiles || pendingFiles.length === 0) {
       setSubmitError("Add at least one photo.");
       return;
@@ -302,13 +487,14 @@ export function MapPage() {
         await supabase.from("bench_photos").insert(photoRows);
       }
 
-      const newBench = {
+      const newBench: Bench = {
         id: benchRow.id,
         latitude: lat,
         longitude: lng,
         title: null,
         description: draftDescription || null,
         mainPhotoUrl,
+        createdBy: user.id,
         status: "pending" as const,
       };
 
@@ -365,6 +551,16 @@ export function MapPage() {
   }, []);
 
   useEffect(() => {
+    if (addMode === "idle") {
+      setEditingBench(null);
+      setPendingFiles(null);
+      setDraftDescription("");
+      setChosenLocation(null);
+      setSubmitError(null);
+    }
+  }, [addMode]);
+
+  useEffect(() => {
     let cancelled = false;
 
     supabase.auth.getUser().then(({ data }) => {
@@ -393,9 +589,6 @@ export function MapPage() {
     (async () => {
       // Determine if current user is admin
       let admin = false;
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
 
       if (user) {
         const { data: profile } = await supabase
@@ -414,7 +607,7 @@ export function MapPage() {
       const { data, error } = await supabase
         .from("benches")
         .select(
-          "id, latitude, longitude, title, description, main_photo_url, status"
+          "id, latitude, longitude, title, description, main_photo_url, status, created_by"
         );
 
       if (error || !data || cancelled) {
@@ -432,6 +625,7 @@ export function MapPage() {
           description: row.description,
           mainPhotoUrl: row.main_photo_url,
           status: row.status,
+          createdBy: row.created_by,
         }))
       );
     })();
@@ -439,7 +633,7 @@ export function MapPage() {
     return () => {
       cancelled = true;
     };
-  }, [setBenches]);
+  }, [setBenches, user]);
 
   const mapCenter = center;
 
@@ -495,6 +689,15 @@ export function MapPage() {
                   <div className="text-xs text-slate-800">
                     {bench.description}
                   </div>
+                )}
+                {(isAdmin || (user && bench.createdBy === user.id)) && (
+                  <button
+                    type="button"
+                    className="mt-1 inline-flex self-start rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-slate-50"
+                    onClick={() => startEditingBench(bench)}
+                  >
+                    Edit
+                  </button>
                 )}
                 {isAdmin && (
                   <div
@@ -582,10 +785,23 @@ export function MapPage() {
         pendingFileList={pendingFileList}
         dragFromIndexRef={dragFromIndexRef}
         handleChooseLocation={handleChooseLocation}
-        handleSubmit={handleSubmit}
+        handleSubmit={editingBench ? handleEditSubmit : handleCreateSubmit}
         removePhoto={removePhoto}
         movePhoto={movePhoto}
         openSignIn={openSignIn}
+        mode={editingBench ? "edit" : "create"}
+        existingMainPhotoUrl={editingBench?.mainPhotoUrl ?? null}
+        canDelete={
+          !!editingBench &&
+          (isAdmin || (user && editingBench.createdBy === user.id))
+        }
+        onDeleteBench={
+          editingBench
+            ? () => {
+                void handleDeleteBench(editingBench);
+              }
+            : undefined
+        }
         submitError={submitError}
         isSubmitting={isSubmitting}
       />
@@ -593,6 +809,7 @@ export function MapPage() {
       {/* Bottom-left hamburger menu */}
       <HamburgerMenu
         isSignedIn={isSignedIn}
+        isAdmin={isAdmin}
         openSignIn={openSignIn}
         handleSignOut={handleSignOut}
         onGoToAdmin={() => navigate("/admin")}
