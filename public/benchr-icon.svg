@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="1024" height="1024" style="overflow:hidden">
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="30%">
+      <stop offset="0%" stop-color="#f2fff4"/>
+      <stop offset="100%" stop-color="#dff7e4"/>
+    </radialGradient>
+
+    <linearGradient id="beam" x1="0" x2="1">
+      <stop offset="0%" stop-color="#8df7a2" stop-opacity="0.82"/>
+      <stop offset="60%" stop-color="#4ccf63" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#0c7a35" stop-opacity="0.32"/>
+    </linearGradient>
+
+    <clipPath id="tile">
+      <rect width="200" height="200" rx="36" ry="36"/>
+    </clipPath>
+  </defs>
+
+  <rect width="200" height="200" rx="36" fill="url(#bg)"/>
+
+  <g clip-path="url(#tile)">
+    <g fill="none" stroke="#1e8a4f" stroke-width="2.2" opacity="0.70">
+      <circle cx="100" cy="100" r="12"/>
+      <circle cx="100" cy="100" r="36"/>
+      <circle cx="100" cy="100" r="60"/>
+      <circle cx="100" cy="100" r="84"/>
+      <circle cx="100" cy="100" r="108"/>
+      <circle cx="100" cy="100" r="132"/>
+      <circle cx="100" cy="100" r="156"/>
+      <circle cx="100" cy="100" r="200"/>
+      <circle cx="100" cy="100" r="320"/>
+      <circle cx="100" cy="100" r="560"/>
+      <circle cx="100" cy="100" r="1100"/>
+      <circle cx="100" cy="100" r="2200"/>
+    </g>
+
+    <g transform="rotate(-41 100 100)" opacity="0.52">
+      <path d="M100 100 L260 40 A260 260 0 0 1 140 260 Z" fill="url(#beam)"/>
+      <path d="M100 100 L260 40" stroke="#0e8f3f" stroke-width="1.6" stroke-linecap="round" opacity="0.60"/>
+    </g>
+  </g>
+
+  <g transform="translate(100 100) scale(1.15) translate(-100 -100)" opacity="1">
+    <rect x="46" y="64" width="108" height="20" rx="3.5" fill="#000"/>
+    <rect x="36" y="86" width="128" height="28" rx="5" fill="#000"/>
+    <rect x="60" y="114" width="16" height="26" rx="2.5" fill="#000"/>
+    <rect x="124" y="114" width="16" height="26" rx="2.5" fill="#000"/>
+  </g>
+</svg>

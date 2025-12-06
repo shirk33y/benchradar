@@ -1,0 +1,22 @@
+# Node / npm
+node_modules/
+*.log
+npm-debug.log*
+
+# Vite
+/dist/
+.vite/
+
+# Deno
+.deno/
+
+# Env / local config
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
