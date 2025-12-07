@@ -1,4 +1,4 @@
-import create from "zustand";
+import { create } from "zustand";
 
 export type AddMode = "idle" | "choosing-location" | "details";
 export type AuthMode = "closed" | "signin";
@@ -28,11 +28,11 @@ export const useMapUiStore = create<MapUiState>(
   isAddOpen: false,
   addMode: "idle",
   authMode: "closed",
-  setMenuOpen: (open) => set({ isMenuOpen: open }),
+  setMenuOpen: (open: boolean) => set({ isMenuOpen: open }),
   toggleMenu: () => set((state) => ({ isMenuOpen: !state.isMenuOpen })),
-  setAddOpen: (open) => set({ isAddOpen: open }),
+  setAddOpen: (open: boolean) => set({ isAddOpen: open }),
   toggleAdd: () => set((state) => ({ isAddOpen: !state.isAddOpen })),
-  setAddMode: (mode) => set({ addMode: mode }),
-  setAuthMode: (mode) => set({ authMode: mode }),
+  setAddMode: (mode: AddMode) => set({ addMode: mode }),
+  setAuthMode: (mode: AuthMode) => set({ authMode: mode }),
   }),
 );

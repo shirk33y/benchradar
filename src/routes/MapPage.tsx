@@ -311,7 +311,7 @@ export function MapPage() {
       }
 
       setBenches(
-        benches.map((b) =>
+        benches.map((b: Bench) =>
           b.id === editingBench.id
             ? {
                 ...b,
@@ -365,7 +365,7 @@ export function MapPage() {
       return;
     }
 
-    setBenches(benches.filter((b) => b.id !== bench.id));
+    setBenches(benches.filter((b: Bench) => b.id !== bench.id));
     setAddMode("idle");
     setEditingBench(null);
     setPendingFiles(null);
@@ -579,9 +579,9 @@ export function MapPage() {
     setMapStyle((prev) => (prev === "normal" ? "satellite" : "normal"));
   };
 
-  const fetchBenchesForCurrentBounds = async () => {
+  const fetchBenchesForCurrentBounds = async (mapOverride?: LeafletMap) => {
     // Use current map bounds to limit benches we load
-    const map = mapRef.current;
+    const map = mapOverride ?? mapRef.current;
     if (!map) return;
 
     const bounds = map.getBounds();
@@ -719,11 +719,12 @@ export function MapPage() {
         scrollWheelZoom
         className="z-0 h-full w-full"
         ref={mapRef}
-        whenCreated={(mapInstance) => {
-          mapRef.current = mapInstance;
-          void fetchBenchesForCurrentBounds();
+        whenReady={() => {
+          const mapInstance = mapRef.current;
+          if (!mapInstance) return;
+          void fetchBenchesForCurrentBounds(mapInstance);
           mapInstance.on("moveend", () => {
-            void fetchBenchesForCurrentBounds();
+            void fetchBenchesForCurrentBounds(mapInstance);
           });
         }}
       >
@@ -878,7 +879,7 @@ export function MapPage() {
         }
         canDelete={
           !!editingBench &&
-          (isAdmin || (user && editingBench.createdBy === user.id))
+          (isAdmin || (!!user && editingBench.createdBy === user.id))
         }
         onDeleteBench={
           editingBench

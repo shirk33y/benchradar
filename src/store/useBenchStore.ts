@@ -1,4 +1,4 @@
-import create from "zustand";
+import { create } from "zustand";
 
 export type Bench = {
   id: string;
@@ -22,7 +22,7 @@ export const useBenchStore = create<BenchState>(
   (set: (state: Partial<BenchState>) => void) => ({
     benches: [],
     selectedBenchId: null,
-    setBenches: (benches) => set({ benches }),
-    selectBench: (benchId) => set({ selectedBenchId: benchId }),
+    setBenches: (benches: Bench[]) => set({ benches }),
+    selectBench: (benchId: string | null) => set({ selectedBenchId: benchId }),
   })
 );
