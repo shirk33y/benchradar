@@ -36,12 +36,14 @@ const approvedIcon = divIcon({
 });
 
 function createBenchPhotoIcon(url: string) {
+  const thumbUrl = toThumbnailUrl(url);
   return divIcon({
     className: "bench-photo-marker",
     html: `
       <div class="w-10 h-10 rounded-[12px] border-2 border-white shadow-[0_0_0_2px_rgba(15,23,42,0.9)] overflow-hidden bg-slate-200">
         <img
-          src="${url}"
+          src="${thumbUrl}"
+          onerror="this.onerror=null;this.src='${url}'"
           class="w-full h-full object-cover block"
         />
       </div>
@@ -81,6 +83,47 @@ const compressImage = imageCompression as unknown as (
   }
 ) => Promise<File>;
 
+async function convertToJpeg(
+  file: File,
+  maxSize: number
+): Promise<File> {
+  const bitmap = await createImageBitmap(file);
+
+  const scale = Math.min(maxSize / bitmap.width, maxSize / bitmap.height, 1);
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("No canvas context");
+
+  ctx.drawImage(bitmap, 0, 0, width, height);
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob((b) => resolve(b), "image/jpeg", 0.9)
+  );
+
+  if (!blob) {
+    throw new Error("JPEG conversion failed");
+  }
+
+  return new File(
+    [blob],
+    file.name.replace(/\.[^.]+$/, "") + ".jpg",
+    { type: "image/jpeg" }
+  );
+}
+
+function toThumbnailUrl(url: string): string {
+  const [base, query] = url.split("?", 2);
+  const lastDot = base.lastIndexOf(".");
+  if (lastDot === -1) return url;
+  const withThumb = `${base.slice(0, lastDot)}_thumb${base.slice(lastDot)}`;
+  return query ? `${withThumb}?${query}` : withThumb;
+}
+
 export function MapPage() {
   const [center, setCenter] = useState(DEFAULT_CENTER as LatLngExpression);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -100,6 +143,8 @@ export function MapPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editingBench, setEditingBench] = useState<Bench | null>(null);
+  const [removeExistingMainPhoto, setRemoveExistingMainPhoto] =
+    useState(false);
   const [mapStyle, setMapStyle] = useState<"normal" | "satellite">("normal");
   const mapRef = useRef<LeafletMap | null>(null);
   const selectFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -167,6 +212,15 @@ export function MapPage() {
         ? (chosenLocation as [number, number])
         : baseLatLng;
 
+    const hasExisting =
+      !removeExistingMainPhoto && !!editingBench.mainPhotoUrl;
+    const hasNew = pendingFiles && pendingFiles.length > 0;
+
+    if (!hasExisting && !hasNew) {
+      setSubmitError("Add at least one photo.");
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -176,31 +230,17 @@ export function MapPage() {
 
       if (pendingFiles && pendingFiles.length > 0) {
         for (const file of pendingFiles) {
-          const compressed = await compressImage(file, {
-            maxSizeMB: 2,
-            maxWidthOrHeight: 1920,
-            useWebWorker: true,
-          });
+          const largeJpeg = await convertToJpeg(file, 1080);
+          const thumbJpeg = await convertToJpeg(file, 48);
 
-          const extFromType =
-            compressed.type === "image/webp"
-              ? "webp"
-              : compressed.type === "image/jpeg"
-              ? "jpg"
-              : undefined;
-
-          const fallbackExt = file.name.includes(".")
-            ? file.name.split(".").pop() || "jpg"
-            : "jpg";
-
-          const ext = extFromType ?? fallbackExt;
-
-          const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+          const id = crypto.randomUUID();
+          const largePath = `${user.id}/${id}.jpg`;
+          const thumbPath = `${user.id}/${id}_thumb.jpg`;
 
           const { error: uploadError } = await supabase.storage
             .from("bench_photos")
-            .upload(path, compressed, {
-              contentType: compressed.type,
+            .upload(largePath, largeJpeg, {
+              contentType: "image/jpeg",
               upsert: false,
             });
 
@@ -209,16 +249,27 @@ export function MapPage() {
             return;
           }
 
+          await supabase.storage
+            .from("bench_photos")
+            .upload(thumbPath, thumbJpeg, {
+              contentType: "image/jpeg",
+              upsert: false,
+            });
+
           const {
             data: { publicUrl },
-          } = supabase.storage.from("bench_photos").getPublicUrl(path);
+          } = supabase.storage.from("bench_photos").getPublicUrl(largePath);
 
           uploadedUrls.push(publicUrl);
         }
+      }
 
-        if (uploadedUrls.length > 0) {
-          mainPhotoUrl = uploadedUrls[0];
-        }
+      if (removeExistingMainPhoto) {
+        mainPhotoUrl = null;
+      }
+
+      if (uploadedUrls.length > 0 && !mainPhotoUrl) {
+        mainPhotoUrl = uploadedUrls[0];
       }
 
       const updates: Record<string, unknown> = {
@@ -239,6 +290,14 @@ export function MapPage() {
       if (benchError) {
         setSubmitError("Saving bench failed. Please try again.");
         return;
+      }
+
+      if (removeExistingMainPhoto && editingBench.mainPhotoUrl) {
+        await supabase
+          .from("bench_photos")
+          .delete()
+          .eq("bench_id", editingBench.id)
+          .eq("url", editingBench.mainPhotoUrl);
       }
 
       if (uploadedUrls.length > 0) {
@@ -267,6 +326,7 @@ export function MapPage() {
 
       setAddMode("idle");
       setEditingBench(null);
+      setRemoveExistingMainPhoto(false);
       setPendingFiles(null);
       setDraftDescription("");
       setChosenLocation(null);
@@ -417,31 +477,17 @@ export function MapPage() {
       const uploadedUrls: string[] = [];
 
       for (const file of pendingFiles) {
-        const compressed = await compressImage(file, {
-          maxSizeMB: 2,
-          maxWidthOrHeight: 1920,
-          useWebWorker: true,
-        });
+        const largeJpeg = await convertToJpeg(file, 1080);
+        const thumbJpeg = await convertToJpeg(file, 48);
 
-        const extFromType =
-          compressed.type === "image/webp"
-            ? "webp"
-            : compressed.type === "image/jpeg"
-            ? "jpg"
-            : undefined;
-
-        const fallbackExt = file.name.includes(".")
-          ? file.name.split(".").pop() || "jpg"
-          : "jpg";
-
-        const ext = extFromType ?? fallbackExt;
-
-        const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+        const id = crypto.randomUUID();
+        const largePath = `${user.id}/${id}.jpg`;
+        const thumbPath = `${user.id}/${id}_thumb.jpg`;
 
         const { error: uploadError } = await supabase.storage
           .from("bench_photos")
-          .upload(path, compressed, {
-            contentType: compressed.type,
+          .upload(largePath, largeJpeg, {
+            contentType: "image/jpeg",
             upsert: false,
           });
 
@@ -450,9 +496,16 @@ export function MapPage() {
           return;
         }
 
+        await supabase.storage
+          .from("bench_photos")
+          .upload(thumbPath, thumbJpeg, {
+            contentType: "image/jpeg",
+            upsert: false,
+          });
+
         const {
           data: { publicUrl },
-        } = supabase.storage.from("bench_photos").getPublicUrl(path);
+        } = supabase.storage.from("bench_photos").getPublicUrl(largePath);
 
         uploadedUrls.push(publicUrl);
       }
@@ -526,6 +579,47 @@ export function MapPage() {
     setMapStyle((prev) => (prev === "normal" ? "satellite" : "normal"));
   };
 
+  const fetchBenchesForCurrentBounds = async () => {
+    // Use current map bounds to limit benches we load
+    const map = mapRef.current;
+    if (!map) return;
+
+    const bounds = map.getBounds();
+    const south = bounds.getSouth();
+    const north = bounds.getNorth();
+    const west = bounds.getWest();
+    const east = bounds.getEast();
+
+    const { data, error } = await supabase
+      .from("benches")
+      .select(
+        "id, latitude, longitude, title, description, main_photo_url, status, created_by"
+      )
+      .gte("latitude", south)
+      .lte("latitude", north)
+      .gte("longitude", west)
+      .lte("longitude", east);
+
+    if (error || !data) {
+      return;
+    }
+
+    const rows = data as BenchRow[];
+
+    setBenches(
+      rows.map((row) => ({
+        id: row.id,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        title: row.title,
+        description: row.description,
+        mainPhotoUrl: row.main_photo_url,
+        status: row.status,
+        createdBy: row.created_by,
+      }))
+    );
+  };
+
   useEffect(() => {
     const nav = navigator as Navigator & { geolocation?: Geolocation };
 
@@ -553,6 +647,7 @@ export function MapPage() {
   useEffect(() => {
     if (addMode === "idle") {
       setEditingBench(null);
+      setRemoveExistingMainPhoto(false);
       setPendingFiles(null);
       setDraftDescription("");
       setChosenLocation(null);
@@ -604,30 +699,9 @@ export function MapPage() {
 
       setIsAdmin(admin);
 
-      const { data, error } = await supabase
-        .from("benches")
-        .select(
-          "id, latitude, longitude, title, description, main_photo_url, status, created_by"
-        );
-
-      if (error || !data || cancelled) {
-        return;
+      if (!cancelled) {
+        await fetchBenchesForCurrentBounds();
       }
-
-      const rows = data as BenchRow[];
-
-      setBenches(
-        rows.map((row) => ({
-          id: row.id,
-          latitude: row.latitude,
-          longitude: row.longitude,
-          title: row.title,
-          description: row.description,
-          mainPhotoUrl: row.main_photo_url,
-          status: row.status,
-          createdBy: row.created_by,
-        }))
-      );
     })();
 
     return () => {
@@ -645,6 +719,13 @@ export function MapPage() {
         scrollWheelZoom
         className="z-0 h-full w-full"
         ref={mapRef}
+        whenCreated={(mapInstance) => {
+          mapRef.current = mapInstance;
+          void fetchBenchesForCurrentBounds();
+          mapInstance.on("moveend", () => {
+            void fetchBenchesForCurrentBounds();
+          });
+        }}
       >
         {mapStyle === "normal" ? (
           <TileLayer
@@ -790,7 +871,11 @@ export function MapPage() {
         movePhoto={movePhoto}
         openSignIn={openSignIn}
         mode={editingBench ? "edit" : "create"}
-        existingMainPhotoUrl={editingBench?.mainPhotoUrl ?? null}
+        existingMainPhotoUrl={
+          editingBench && !removeExistingMainPhoto
+            ? editingBench.mainPhotoUrl ?? null
+            : null
+        }
         canDelete={
           !!editingBench &&
           (isAdmin || (user && editingBench.createdBy === user.id))
@@ -799,6 +884,13 @@ export function MapPage() {
           editingBench
             ? () => {
                 void handleDeleteBench(editingBench);
+              }
+            : undefined
+        }
+        onRemoveExistingPhoto={
+          editingBench
+            ? () => {
+                setRemoveExistingMainPhoto(true);
               }
             : undefined
         }

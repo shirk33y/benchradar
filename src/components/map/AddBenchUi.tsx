@@ -28,6 +28,11 @@ export type AddBenchUiProps = {
   openSignIn: () => void;
   submitError: string | null;
   isSubmitting: boolean;
+  mode?: "create" | "edit";
+  existingMainPhotoUrl?: string | null;
+  canDelete?: boolean;
+  onDeleteBench?: () => void;
+  onRemoveExistingPhoto?: () => void;
 };
 
 export function AddBenchUi({
@@ -46,6 +51,11 @@ export function AddBenchUi({
   openSignIn,
   submitError,
   isSubmitting,
+  mode = "create",
+  existingMainPhotoUrl = null,
+  canDelete = false,
+  onDeleteBench,
+  onRemoveExistingPhoto,
 }: AddBenchUiProps) {
   const { addMode, isAddOpen, toggleAdd, setAddOpen, setAddMode } = useMapUiStore();
 
@@ -180,7 +190,9 @@ export function AddBenchUi({
             </div>
 
             <div className="mb-3 flex items-center justify-between text-xs text-slate-300">
-              <span className="font-medium">New bench</span>
+              <span className="font-medium">
+                {mode === "edit" ? "Edit bench" : "New bench"}
+              </span>
             </div>
 
             <div className="mt-1 flex items-center justify-between text-[11px] text-slate-300">
@@ -200,81 +212,71 @@ export function AddBenchUi({
             </div>
 
             <div className="mt-3">
-              <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Photos</span>
-                {pendingFileList.length > 0 && (
-                  <span>{pendingFileList.length} selected</span>
-                )}
-              </div>
+              <div className="mb-1 text-[11px] text-slate-400">Photos</div>
 
-              {pendingFileList.length === 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {mode === "edit" && existingMainPhotoUrl && (
+                  <div className="relative flex h-20 w-20 items-center justify-center rounded-xl border border-slate-800/80 bg-slate-900/90">
+                    <img
+                      src={existingMainPhotoUrl}
+                      alt="Current photo"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                    {onRemoveExistingPhoto && (
+                      <button
+                        type="button"
+                        className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/80 text-[9px] text-slate-950 shadow"
+                        onClick={onRemoveExistingPhoto}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {pendingFileList.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    draggable
+                    onDragStart={() => {
+                      dragFromIndexRef.current = index;
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const from = dragFromIndexRef.current;
+                      if (from === null || from === index) return;
+                      movePhoto(from, index);
+                      dragFromIndexRef.current = null;
+                    }}
+                    className="relative flex h-20 w-20 items-center justify-center rounded-xl border border-slate-800/80 bg-slate-900/90 text-[10px] text-slate-200"
+                  >
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/80 text-[9px] text-slate-950 shadow"
+                      onClick={() => removePhoto(index)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+
                 <button
                   type="button"
-                  className="w-full rounded-2xl border border-dashed border-slate-700/80 bg-slate-900/70 px-3 py-3 text-[11px] text-slate-300 active:scale-[0.99]"
+                  aria-label="Add photos"
+                  className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-slate-700/80 bg-slate-900/70 text-xl text-slate-300 active:scale-[0.99]"
                   onClick={() => selectFileInputRef.current?.click()}
                 >
-                  Add photos
+                  +
                 </button>
-              )}
-
-              {pendingFileList.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {pendingFileList.map((file, index) => (
-                    <div
-                      key={`${file.name}-${index}`}
-                      draggable
-                      onDragStart={() => {
-                        dragFromIndexRef.current = index;
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const from = dragFromIndexRef.current;
-                        if (from === null || from === index) return;
-                        movePhoto(from, index);
-                        dragFromIndexRef.current = null;
-                      }}
-                      className="min-w-[120px] rounded-2xl border border-slate-800/80 bg-slate-900/90 px-2 py-2 text-[10px] text-slate-200"
-                    >
-                      <div className="mb-1 h-20 w-full overflow-hidden rounded-xl bg-slate-800/80">
-                        <img
-                          src={URL.createObjectURL(file)}
-                          alt={file.name}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="flex-1 truncate" title={file.name}>
-                          {file.name}
-                        </span>
-                        {index === 0 && (
-                          <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">
-                            Main
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          className="ml-1 rounded-full bg-rose-500/80 px-1.5 py-0.5 text-[9px] text-slate-950"
-                          onClick={() => removePhoto(index)}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <button
-                    type="button"
-                    className="flex min-w-[72px] items-center justify-center rounded-2xl border border-dashed border-slate-700/80 bg-slate-900/70 px-2 py-2 text-[11px] text-slate-300 active:scale-[0.99]"
-                    onClick={() => selectFileInputRef.current?.click()}
-                  >
-                    + Add
-                  </button>
-                </div>
-              )}
+              </div>
             </div>
 
             <div className="mt-3">
@@ -288,22 +290,42 @@ export function AddBenchUi({
               />
             </div>
 
-            <div className="mt-4 flex justify-end gap-2 text-xs">
-              <button
-                type="button"
-                className="rounded-2xl border border-slate-700/80 bg-slate-900/80 px-4 py-2 font-medium text-slate-200 active:scale-[0.98]"
-                onClick={() => setAddMode("idle")}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-2xl bg-sky-500/90 px-5 py-2 font-semibold text-slate-950 shadow-lg shadow-sky-900/70 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Submitting..." : "Continue"}
-              </button>
+            <div className="mt-4 flex items-center justify-between text-xs">
+              {mode === "edit" && canDelete && onDeleteBench && (
+                <button
+                  type="button"
+                  className="rounded-2xl border border-rose-700/80 bg-rose-700/20 px-3 py-2 font-semibold text-rose-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={onDeleteBench}
+                  disabled={isSubmitting}
+                >
+                  Delete
+                </button>
+              )}
+
+              <div className="ml-auto flex gap-2">
+                <button
+                  type="button"
+                  className="rounded-2xl border border-slate-700/80 bg-slate-900/80 px-4 py-2 font-medium text-slate-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={() => setAddMode("idle")}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-2xl bg-sky-500/90 px-5 py-2 font-semibold text-slate-950 shadow-lg shadow-sky-900/70 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting
+                    ? mode === "edit"
+                      ? "Saving..."
+                      : "Submitting..."
+                    : mode === "edit"
+                    ? "Save"
+                    : "Continue"}
+                </button>
+              </div>
             </div>
             {submitError && (
               <div className="mt-2 text-[11px] text-rose-300">{submitError}</div>
