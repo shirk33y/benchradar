@@ -17,6 +17,10 @@ export type AddBenchUiProps = {
   selectFileInputRef: RefObject<HTMLInputElement | null>;
   cameraFileInputRef: RefObject<HTMLInputElement | null>;
   chosenLocation: LatLngExpression | null;
+  locationInput: string;
+  onLocationInputChange: (value: string) => void;
+  onApplyLocationInput: () => void;
+  locationInputError: string | null;
   draftDescription: string;
   setDraftDescription: (value: string) => void;
   pendingFileList: File[];
@@ -40,6 +44,10 @@ export function AddBenchUi({
   selectFileInputRef,
   cameraFileInputRef,
   chosenLocation,
+  locationInput,
+  onLocationInputChange,
+  onApplyLocationInput,
+  locationInputError,
   draftDescription,
   setDraftDescription,
   pendingFileList,
@@ -209,6 +217,28 @@ export function AddBenchUi({
               >
                 Choose on map
               </button>
+            </div>
+            <div className="mt-2 flex flex-col gap-1 text-[11px]">
+              <label className="text-slate-400">Paste coordinates</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={locationInput}
+                  onChange={(e) => onLocationInputChange(e.target.value)}
+                  placeholder="e.g. 54.647800,-2.150950"
+                  className="flex-1 rounded-2xl border border-slate-700/80 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 outline-none focus:border-sky-400/70"
+                />
+                <button
+                  type="button"
+                  className="rounded-2xl bg-slate-100/10 px-4 py-2 text-xs font-semibold text-slate-100 shadow-sm shadow-slate-900/50 active:scale-[0.98]"
+                  onClick={onApplyLocationInput}
+                >
+                  Apply
+                </button>
+              </div>
+              {locationInputError && (
+                <div className="text-[10px] text-rose-300">{locationInputError}</div>
+              )}
             </div>
 
             <div className="mt-3">

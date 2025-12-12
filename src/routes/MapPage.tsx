@@ -242,6 +242,10 @@ export function MapPage() {
   const [chosenLocation, setChosenLocation] = useState<LatLngExpression | null>(
     null
   );
+  const [locationInput, setLocationInput] = useState("");
+  const [locationInputError, setLocationInputError] = useState<string | null>(
+    null
+  );
   const [draftDescription, setDraftDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -305,6 +309,56 @@ export function MapPage() {
       }
     }
 
+    setAddMode("details");
+  };
+
+  const handleLocationInputChange = (value: string) => {
+    setLocationInput(value);
+    if (locationInputError) {
+      setLocationInputError(null);
+    }
+  };
+
+  const handleApplyLocationInput = () => {
+    if (!locationInput.trim()) {
+      setLocationInputError("Enter coordinates like 54.647800,-2.150950");
+      return;
+    }
+
+    const normalized = locationInput
+      .replace(/[^\d.,\-\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const parts = normalized.split(/[, ]+/).filter(Boolean);
+
+    if (parts.length < 2) {
+      setLocationInputError("Expected two numbers separated by comma or space");
+      return;
+    }
+
+    const lat = Number(parts[0]);
+    const lng = Number(parts[1]);
+
+    if (
+      Number.isNaN(lat) ||
+      Number.isNaN(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    ) {
+      setLocationInputError("Coordinates must be valid lat,lng values");
+      return;
+    }
+
+    const location: LatLngExpression = [lat, lng];
+    setChosenLocation(location);
+    setCenter(location);
+    if (mapRef.current) {
+      mapRef.current.setView({ lat, lng });
+    }
+    setLocationInputError(null);
     setAddMode("details");
   };
 
@@ -962,6 +1016,10 @@ export function MapPage() {
         selectFileInputRef={selectFileInputRef}
         cameraFileInputRef={cameraFileInputRef}
         chosenLocation={chosenLocation}
+        locationInput={locationInput}
+        onLocationInputChange={handleLocationInputChange}
+        onApplyLocationInput={handleApplyLocationInput}
+        locationInputError={locationInputError}
         draftDescription={draftDescription}
         setDraftDescription={setDraftDescription}
         pendingFileList={pendingFileList}
