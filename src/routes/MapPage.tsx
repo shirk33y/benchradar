@@ -579,26 +579,12 @@ export function MapPage() {
     setMapStyle((prev) => (prev === "normal" ? "satellite" : "normal"));
   };
 
-  const fetchBenchesForCurrentBounds = async (mapOverride?: LeafletMap) => {
-    // Use current map bounds to limit benches we load
-    const map = mapOverride ?? mapRef.current;
-    if (!map) return;
-
-    const bounds = map.getBounds();
-    const south = bounds.getSouth();
-    const north = bounds.getNorth();
-    const west = bounds.getWest();
-    const east = bounds.getEast();
-
+  const fetchBenchesForCurrentBounds = async (_mapOverride?: LeafletMap) => {
     const { data, error } = await supabase
       .from("benches")
       .select(
         "id, latitude, longitude, title, description, main_photo_url, status, created_by"
-      )
-      .gte("latitude", south)
-      .lte("latitude", north)
-      .gte("longitude", west)
-      .lte("longitude", east);
+      );
 
     if (error || !data) {
       return;
