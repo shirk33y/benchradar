@@ -8,4 +8,11 @@ declare module "exifr" {
     | undefined
     | null
   >;
+
+  export function parse(
+    input: File | Blob | ArrayBuffer,
+    options?: {
+      pick?: string[];
+    }
+  ): Promise<Record<string, unknown> | undefined | null>;
 }

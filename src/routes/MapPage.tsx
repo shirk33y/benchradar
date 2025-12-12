@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { divIcon, type LatLngExpression, type Map as LeafletMap } from "leaflet";
+import {
+  divIcon,
+  type LatLngExpression,
+  type LatLngTuple,
+  type Map as LeafletMap,
+} from "leaflet";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import imageCompression from "browser-image-compression";
 import * as exifr from "exifr";
@@ -124,6 +129,104 @@ function toThumbnailUrl(url: string): string {
   return query ? `${withThumb}?${query}` : withThumb;
 }
 
+type ParsedGpsMetadata = {
+  latitude?: number;
+  longitude?: number;
+  GPSLatitude?: number[];
+  GPSLongitude?: number[];
+  GPSLatitudeRef?: string;
+  GPSLongitudeRef?: string;
+};
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function dmsToDecimal(value: unknown, ref?: unknown): number | null {
+  if (Array.isArray(value) && value.length > 0) {
+    const [degRaw, minRaw = 0, secRaw = 0] = value as number[];
+    if (typeof degRaw !== "number") {
+      return null;
+    }
+    const min = typeof minRaw === "number" ? minRaw : 0;
+    const sec = typeof secRaw === "number" ? secRaw : 0;
+    let decimal = degRaw + min / 60 + sec / 3600;
+    if (
+      typeof ref === "string" &&
+      (ref.toUpperCase() === "S" || ref.toUpperCase() === "W")
+    ) {
+      decimal *= -1;
+    }
+    return decimal;
+  }
+
+  if (isNumber(value)) {
+    let decimal = value;
+    if (
+      typeof ref === "string" &&
+      (ref.toUpperCase() === "S" || ref.toUpperCase() === "W")
+    ) {
+      decimal *= -1;
+    }
+    return decimal;
+  }
+
+  return null;
+}
+
+async function tryExtractGpsFromFile(file: File): Promise<LatLngTuple | null> {
+  try {
+    const gps = await exifr.gps(file);
+    if (gps && isNumber(gps.latitude) && isNumber(gps.longitude)) {
+      return [gps.latitude, gps.longitude];
+    }
+  } catch (_err) {
+    // ignore and try fallback parsing
+  }
+
+  try {
+    const parsed = (await exifr.parse(file, {
+      pick: [
+        "latitude",
+        "longitude",
+        "GPSLatitude",
+        "GPSLongitude",
+        "GPSLatitudeRef",
+        "GPSLongitudeRef",
+      ],
+    })) as ParsedGpsMetadata | undefined | null;
+
+    if (!parsed) return null;
+
+    const lat =
+      isNumber(parsed.latitude)
+        ? parsed.latitude
+        : dmsToDecimal(parsed.GPSLatitude, parsed.GPSLatitudeRef);
+    const lng =
+      isNumber(parsed.longitude)
+        ? parsed.longitude
+        : dmsToDecimal(parsed.GPSLongitude, parsed.GPSLongitudeRef);
+
+    if (isNumber(lat) && isNumber(lng)) {
+      return [lat, lng];
+    }
+  } catch (_err) {
+    // no-op; fall back to manual selection
+  }
+
+  return null;
+}
+
+async function extractGpsFromFiles(files: File[]): Promise<LatLngTuple | null> {
+  for (const file of files) {
+    const coords = await tryExtractGpsFromFile(file);
+    if (coords) {
+      return coords;
+    }
+  }
+  return null;
+}
+
 export function MapPage() {
   const [center, setCenter] = useState(DEFAULT_CENTER as LatLngExpression);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -174,20 +277,31 @@ export function MapPage() {
     const incoming = Array.from(files);
     setPendingFiles((prev) => [...(prev ?? []), ...incoming]);
 
-    // If we don't yet have a chosenLocation, try to read it from EXIF of the first photo
-    if (!chosenLocation) {
-      try {
-        const gps = await exifr.gps(incoming[0]);
-        if (gps && typeof gps.latitude === "number" && typeof gps.longitude === "number") {
-          const loc: LatLngExpression = [gps.latitude, gps.longitude];
-          setChosenLocation(loc);
-          setCenter(loc);
+    if (incoming.length > 0) {
+      const gpsLocation = await extractGpsFromFiles(incoming);
+      if (gpsLocation) {
+        let applied = false;
+        setChosenLocation((current) => {
+          if (current) {
+            return current;
+          }
+          applied = true;
+          return gpsLocation;
+        });
+
+        if (applied) {
+          const locationExpression: LatLngExpression = [
+            gpsLocation[0],
+            gpsLocation[1],
+          ];
+          setCenter(locationExpression);
           if (mapRef.current) {
-            mapRef.current.setView({ lat: gps.latitude, lng: gps.longitude });
+            mapRef.current.setView({
+              lat: gpsLocation[0],
+              lng: gpsLocation[1],
+            });
           }
         }
-      } catch (_err) {
-        // silently fall back to manual map selection
       }
     }
 
