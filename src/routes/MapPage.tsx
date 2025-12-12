@@ -129,6 +129,10 @@ function toThumbnailUrl(url: string): string {
   return query ? `${withThumb}?${query}` : withThumb;
 }
 
+function formatLatLngInput(lat: number, lng: number): string {
+  return `${lat.toFixed(6)},${lng.toFixed(6)}`;
+}
+
 type ParsedGpsMetadata = {
   latitude?: number;
   longitude?: number;
@@ -319,7 +323,7 @@ export function MapPage() {
     }
   };
 
-  const handleApplyLocationInput = () => {
+  const handleLocationInputBlur = () => {
     if (!locationInput.trim()) {
       setLocationInputError("Enter coordinates like 54.647800,-2.150950");
       return;
@@ -355,11 +359,11 @@ export function MapPage() {
     const location: LatLngExpression = [lat, lng];
     setChosenLocation(location);
     setCenter(location);
+    setLocationInput(formatLatLngInput(lat, lng));
     if (mapRef.current) {
       mapRef.current.setView({ lat, lng });
     }
     setLocationInputError(null);
-    setAddMode("details");
   };
 
   const handleEditSubmit = async () => {
@@ -539,6 +543,7 @@ export function MapPage() {
     setPendingFiles(null);
     setDraftDescription("");
     setChosenLocation(null);
+    setLocationInput("");
     setSubmitError(null);
   };
 
@@ -590,6 +595,7 @@ export function MapPage() {
     setEditingBench(bench);
     setDraftDescription(bench.description ?? "");
     setChosenLocation([bench.latitude, bench.longitude]);
+    setLocationInput(formatLatLngInput(bench.latitude, bench.longitude));
     setPendingFiles(null);
     setSubmitError(null);
     setAddMode("details");
@@ -603,6 +609,7 @@ export function MapPage() {
     const c = mapRef.current.getCenter();
     const location: LatLngExpression = [c.lat, c.lng];
     setChosenLocation(location);
+    setLocationInput(formatLatLngInput(location[0], location[1]));
     setAddMode("details");
   };
 
@@ -725,6 +732,7 @@ export function MapPage() {
       setPendingFiles(null);
       setDraftDescription("");
       setChosenLocation(null);
+      setLocationInput("");
     } finally {
       setIsSubmitting(false);
     }
@@ -805,6 +813,7 @@ export function MapPage() {
       setPendingFiles(null);
       setDraftDescription("");
       setChosenLocation(null);
+      setLocationInput("");
       setSubmitError(null);
     }
   }, [addMode]);
@@ -1018,6 +1027,7 @@ export function MapPage() {
         chosenLocation={chosenLocation}
         locationInput={locationInput}
         onLocationInputChange={handleLocationInputChange}
+        onLocationInputBlur={handleLocationInputBlur}
         locationInputError={locationInputError}
         draftDescription={draftDescription}
         setDraftDescription={setDraftDescription}

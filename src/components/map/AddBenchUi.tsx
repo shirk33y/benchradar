@@ -10,6 +10,7 @@ export type AddBenchUiProps = {
   chosenLocation: LatLngExpression | null;
   locationInput: string;
   onLocationInputChange: (value: string) => void;
+  onLocationInputBlur: () => void;
   locationInputError: string | null;
   draftDescription: string;
   setDraftDescription: (value: string) => void;
@@ -36,6 +37,7 @@ export function AddBenchUi({
   chosenLocation,
   locationInput,
   onLocationInputChange,
+  onLocationInputBlur,
   locationInputError,
   draftDescription,
   setDraftDescription,
@@ -209,6 +211,7 @@ export function AddBenchUi({
                 type="text"
                 value={locationInput}
                 onChange={(e) => onLocationInputChange(e.target.value)}
+                onBlur={onLocationInputBlur}
                 placeholder={
                   chosenLocation && Array.isArray(chosenLocation)
                     ? `${(chosenLocation as [number, number])[0].toFixed(
