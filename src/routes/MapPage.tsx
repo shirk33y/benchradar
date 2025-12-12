@@ -1018,7 +1018,6 @@ export function MapPage() {
         chosenLocation={chosenLocation}
         locationInput={locationInput}
         onLocationInputChange={handleLocationInputChange}
-        onApplyLocationInput={handleApplyLocationInput}
         locationInputError={locationInputError}
         draftDescription={draftDescription}
         setDraftDescription={setDraftDescription}

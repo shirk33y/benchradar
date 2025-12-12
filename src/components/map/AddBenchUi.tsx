@@ -3,15 +3,6 @@ import type { LatLngExpression } from "leaflet";
 
 import { useMapUiStore, type AddMode } from "../../store/useMapUiStore";
 
-function formatLatLng(loc: LatLngExpression | null): string {
-  if (!loc) return "Not chosen yet";
-  if (Array.isArray(loc) && loc.length >= 2) {
-    const [lat, lng] = loc as [number, number];
-    return `Lat ${lat.toFixed(5)}, Lng ${lng.toFixed(5)}`;
-  }
-  return "Location selected";
-}
-
 export type AddBenchUiProps = {
   isSignedIn: boolean;
   selectFileInputRef: RefObject<HTMLInputElement | null>;
@@ -19,7 +10,6 @@ export type AddBenchUiProps = {
   chosenLocation: LatLngExpression | null;
   locationInput: string;
   onLocationInputChange: (value: string) => void;
-  onApplyLocationInput: () => void;
   locationInputError: string | null;
   draftDescription: string;
   setDraftDescription: (value: string) => void;
@@ -46,7 +36,6 @@ export function AddBenchUi({
   chosenLocation,
   locationInput,
   onLocationInputChange,
-  onApplyLocationInput,
   locationInputError,
   draftDescription,
   setDraftDescription,
@@ -203,39 +192,32 @@ export function AddBenchUi({
               </span>
             </div>
 
-            <div className="mt-1 flex items-center justify-between text-[11px] text-slate-300">
-              <div>
-                <div className="font-medium">Location</div>
-                <div className="text-slate-400">
-                  {formatLatLng(chosenLocation)}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="rounded-full border border-slate-700/80 bg-slate-900/80 px-3 py-1 text-[11px] font-medium text-slate-100 active:scale-[0.98]"
-                onClick={() => setAddMode("choosing-location")}
-              >
-                Choose on map
-              </button>
-            </div>
-            <div className="mt-2 flex flex-col gap-1 text-[11px]">
-              <label className="text-slate-400">Paste coordinates</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={locationInput}
-                  onChange={(e) => onLocationInputChange(e.target.value)}
-                  placeholder="e.g. 54.647800,-2.150950"
-                  className="flex-1 rounded-2xl border border-slate-700/80 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 outline-none focus:border-sky-400/70"
-                />
+            <div className="mt-1 flex flex-col gap-1 text-[11px] text-slate-300">
+              <div className="flex items-center justify-between">
+                <label className="font-medium text-slate-300">
+                  Coordinates
+                </label>
                 <button
                   type="button"
-                  className="rounded-2xl bg-slate-100/10 px-4 py-2 text-xs font-semibold text-slate-100 shadow-sm shadow-slate-900/50 active:scale-[0.98]"
-                  onClick={onApplyLocationInput}
+                  className="rounded-full border border-slate-700/80 bg-slate-900/80 px-3 py-1 text-[11px] font-medium text-slate-100 active:scale-[0.98]"
+                  onClick={() => setAddMode("choosing-location")}
                 >
-                  Apply
+                  Choose on map
                 </button>
               </div>
+              <input
+                type="text"
+                value={locationInput}
+                onChange={(e) => onLocationInputChange(e.target.value)}
+                placeholder={
+                  chosenLocation && Array.isArray(chosenLocation)
+                    ? `${(chosenLocation as [number, number])[0].toFixed(
+                        6,
+                      )},${(chosenLocation as [number, number])[1].toFixed(6)}`
+                    : "e.g. 54.647800,-2.150950"
+                }
+                className="w-full rounded-2xl border border-slate-700/80 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 outline-none focus:border-sky-400/70"
+              />
               {locationInputError && (
                 <div className="text-[10px] text-rose-300">{locationInputError}</div>
               )}
