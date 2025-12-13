@@ -7,6 +7,7 @@ export type Bench = {
   title?: string | null;
   description?: string | null;
   mainPhotoUrl?: string | null;
+  photoUrls?: string[];
   createdBy?: string;
   status: "pending" | "approved" | "rejected";
 };

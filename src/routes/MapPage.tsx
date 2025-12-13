@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   divIcon,
   type LatLngExpression,
@@ -22,6 +23,11 @@ import { AddBenchUi } from "../components/map/AddBenchUi";
 
 const DEFAULT_CENTER: LatLngExpression = [52.2297, 21.0122]; // Warsaw as a neutral default
 
+type BenchPhotoRow = {
+  url: string;
+  is_main: boolean | null;
+};
+
 type BenchRow = {
   id: string;
   latitude: number;
@@ -31,6 +37,7 @@ type BenchRow = {
   main_photo_url: string | null;
   status: "pending" | "approved" | "rejected";
   created_by: string;
+  bench_photos: BenchPhotoRow[] | null;
 };
 
 const approvedIcon = divIcon({
@@ -45,11 +52,11 @@ function createBenchPhotoIcon(url: string) {
   return divIcon({
     className: "bench-photo-marker",
     html: `
-      <div class="w-10 h-10 rounded-[12px] border-2 border-white shadow-[0_0_0_2px_rgba(15,23,42,0.9)] overflow-hidden bg-slate-200">
+      <div class="flex h-10 w-10 items-center justify-center rounded-[12px] border-2 border-white bg-slate-200 shadow-[0_0_0_2px_rgba(15,23,42,0.9)] overflow-hidden">
         <img
           src="${thumbUrl}"
           onerror="this.onerror=null;this.src='${url}'"
-          class="w-full h-full object-cover block"
+          class="block h-full w-full object-cover object-center"
         />
       </div>
     `,
@@ -127,6 +134,41 @@ function toThumbnailUrl(url: string): string {
   if (lastDot === -1) return url;
   const withThumb = `${base.slice(0, lastDot)}_thumb${base.slice(lastDot)}`;
   return query ? `${withThumb}?${query}` : withThumb;
+}
+
+const CHOOSE_MODE_ZOOM = 16;
+const VALIDATION_HINT = "Enter coordinates like 54.647800,-2.150950";
+
+function parseLatLngInput(value: string): [number, number] | null {
+  const normalized = value
+    .replace(/[^\d.,\-\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const parts = normalized.split(/[, ]+/).filter(Boolean);
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+
+  if (
+    Number.isNaN(lat) ||
+    Number.isNaN(lng) ||
+    lat < -90 ||
+    lat > 90 ||
+    lng < -180 ||
+    lng > 180
+  ) {
+    return null;
+  }
+
+  return [lat, lng];
 }
 
 function formatLatLngInput(lat: number, lng: number): string {
@@ -250,17 +292,31 @@ export function MapPage() {
   const [locationInputError, setLocationInputError] = useState<string | null>(
     null
   );
+  const [locationInputDirty, setLocationInputDirty] = useState(false);
   const [draftDescription, setDraftDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editingBench, setEditingBench] = useState<Bench | null>(null);
-  const [removeExistingMainPhoto, setRemoveExistingMainPhoto] =
-    useState(false);
+  const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
+  const [removedExistingPhotoUrls, setRemovedExistingPhotoUrls] = useState<
+    string[]
+  >([]);
+  const [previewState, setPreviewState] = useState<{
+    photos: string[];
+    index: number;
+  } | null>(null);
+  const [previewDragOffset, setPreviewDragOffset] = useState(0);
+  const [previewSwipeOffset, setPreviewSwipeOffset] = useState(0);
   const [mapStyle, setMapStyle] = useState<"normal" | "satellite">("normal");
   const mapRef = useRef<LeafletMap | null>(null);
   const selectFileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraFileInputRef = useRef<HTMLInputElement | null>(null);
   const dragFromIndexRef = useRef<number | null>(null);
+  const previewGestureRef = useRef<{
+    startX: number;
+    startY: number;
+    direction: "horizontal" | "vertical" | null;
+  } | null>(null);
   const { benches, setBenches } = useBenchStore();
   const navigate = useNavigate();
 
@@ -309,6 +365,9 @@ export function MapPage() {
               lng: gpsLocation[1],
             });
           }
+          setLocationInput(formatLatLngInput(gpsLocation[0], gpsLocation[1]));
+          setLocationInputDirty(false);
+          setLocationInputError(null);
         }
       }
     }
@@ -316,46 +375,36 @@ export function MapPage() {
     setAddMode("details");
   };
 
-  const handleLocationInputChange = (value: string) => {
-    setLocationInput(value);
-    if (locationInputError) {
-      setLocationInputError(null);
+  const validateLocationInputValue = (value: string): string | null => {
+    if (!value.trim()) {
+      return VALIDATION_HINT;
     }
+    return parseLatLngInput(value) ? null : "Coordinates must be valid lat,lng values";
+  };
+
+  const handleLocationInputChange = (value: string) => {
+    if (!locationInputDirty) {
+      setLocationInputDirty(true);
+    }
+    setLocationInput(value);
+    setLocationInputError(validateLocationInputValue(value));
   };
 
   const handleLocationInputBlur = () => {
-    if (!locationInput.trim()) {
-      setLocationInputError("Enter coordinates like 54.647800,-2.150950");
+    if (!locationInputDirty) {
+      setLocationInputDirty(true);
+    }
+
+    const error = validateLocationInputValue(locationInput);
+    setLocationInputError(error);
+    if (error) {
       return;
     }
 
-    const normalized = locationInput
-      .replace(/[^\d.,\-\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    const parsed = parseLatLngInput(locationInput);
+    if (!parsed) return;
 
-    const parts = normalized.split(/[, ]+/).filter(Boolean);
-
-    if (parts.length < 2) {
-      setLocationInputError("Expected two numbers separated by comma or space");
-      return;
-    }
-
-    const lat = Number(parts[0]);
-    const lng = Number(parts[1]);
-
-    if (
-      Number.isNaN(lat) ||
-      Number.isNaN(lng) ||
-      lat < -90 ||
-      lat > 90 ||
-      lng < -180 ||
-      lng > 180
-    ) {
-      setLocationInputError("Coordinates must be valid lat,lng values");
-      return;
-    }
-
+    const [lat, lng] = parsed;
     const location: LatLngExpression = [lat, lng];
     setChosenLocation(location);
     setCenter(location);
@@ -384,8 +433,8 @@ export function MapPage() {
         ? (chosenLocation as [number, number])
         : baseLatLng;
 
-    const hasExisting =
-      !removeExistingMainPhoto && !!editingBench.mainPhotoUrl;
+    const remainingExistingUrls = existingPhotoUrls;
+    const hasExisting = remainingExistingUrls.length > 0;
     const hasNew = pendingFiles && pendingFiles.length > 0;
 
     if (!hasExisting && !hasNew) {
@@ -398,7 +447,7 @@ export function MapPage() {
 
     try {
       const uploadedUrls: string[] = [];
-      let mainPhotoUrl = editingBench.mainPhotoUrl ?? null;
+      let mainPhotoUrl = remainingExistingUrls[0] ?? editingBench.mainPhotoUrl ?? null;
 
       if (pendingFiles && pendingFiles.length > 0) {
         for (const file of pendingFiles) {
@@ -436,10 +485,6 @@ export function MapPage() {
         }
       }
 
-      if (removeExistingMainPhoto) {
-        mainPhotoUrl = null;
-      }
-
       if (uploadedUrls.length > 0 && !mainPhotoUrl) {
         mainPhotoUrl = uploadedUrls[0];
       }
@@ -464,23 +509,25 @@ export function MapPage() {
         return;
       }
 
-      if (removeExistingMainPhoto && editingBench.mainPhotoUrl) {
+      if (removedExistingPhotoUrls.length > 0) {
         await supabase
           .from("bench_photos")
           .delete()
           .eq("bench_id", editingBench.id)
-          .eq("url", editingBench.mainPhotoUrl);
+          .in("url", removedExistingPhotoUrls);
       }
 
       if (uploadedUrls.length > 0) {
         const photoRows = uploadedUrls.map((url, index) => ({
           bench_id: editingBench.id,
           url,
-          is_main: index === 0,
+          is_main: mainPhotoUrl === url,
         }));
 
         await supabase.from("bench_photos").insert(photoRows);
       }
+
+      const updatedPhotoUrls = [...remainingExistingUrls, ...uploadedUrls];
 
       setBenches(
         benches.map((b: Bench) =>
@@ -491,6 +538,7 @@ export function MapPage() {
                 longitude: lng,
                 description: draftDescription || null,
                 mainPhotoUrl,
+                photoUrls: updatedPhotoUrls,
               }
             : b
         )
@@ -498,10 +546,14 @@ export function MapPage() {
 
       setAddMode("idle");
       setEditingBench(null);
-      setRemoveExistingMainPhoto(false);
       setPendingFiles(null);
       setDraftDescription("");
       setChosenLocation(null);
+      setExistingPhotoUrls([]);
+      setRemovedExistingPhotoUrls([]);
+      setLocationInput("");
+      setLocationInputDirty(false);
+      setLocationInputError(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -538,13 +590,16 @@ export function MapPage() {
     }
 
     setBenches(benches.filter((b: Bench) => b.id !== bench.id));
-    setAddMode("idle");
-    setEditingBench(null);
-    setPendingFiles(null);
-    setDraftDescription("");
-    setChosenLocation(null);
-    setLocationInput("");
-    setSubmitError(null);
+    if (addMode === "idle") {
+      setEditingBench(null);
+      setPendingFiles(null);
+      setDraftDescription("");
+      setChosenLocation(null);
+      setLocationInput("");
+      setSubmitError(null);
+      setExistingPhotoUrls([]);
+      setRemovedExistingPhotoUrls([]);
+    }
   };
 
   const openSignIn = () => {
@@ -596,8 +651,18 @@ export function MapPage() {
     setDraftDescription(bench.description ?? "");
     setChosenLocation([bench.latitude, bench.longitude]);
     setLocationInput(formatLatLngInput(bench.latitude, bench.longitude));
+    setLocationInputDirty(false);
+    setLocationInputError(null);
     setPendingFiles(null);
     setSubmitError(null);
+    setExistingPhotoUrls(
+      bench.photoUrls && bench.photoUrls.length > 0
+        ? bench.photoUrls
+        : bench.mainPhotoUrl
+        ? [bench.mainPhotoUrl]
+        : []
+    );
+    setRemovedExistingPhotoUrls([]);
     setAddMode("details");
   };
 
@@ -610,6 +675,8 @@ export function MapPage() {
     const location: LatLngExpression = [c.lat, c.lng];
     setChosenLocation(location);
     setLocationInput(formatLatLngInput(location[0], location[1]));
+    setLocationInputDirty(false);
+    setLocationInputError(null);
     setAddMode("details");
   };
 
@@ -623,6 +690,105 @@ export function MapPage() {
       return next;
     });
   };
+
+  const resetPreviewGesture = (
+    target?: EventTarget & Element,
+    pointerId?: number
+  ) => {
+    if (target && typeof target.releasePointerCapture === "function" && pointerId !== undefined) {
+      try {
+        target.releasePointerCapture(pointerId);
+      } catch {
+        // ignore release errors
+      }
+    }
+    previewGestureRef.current = null;
+    setPreviewDragOffset(0);
+    setPreviewSwipeOffset(0);
+  };
+
+  const handlePreviewPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!previewState) return;
+    previewGestureRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      direction: null,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePreviewPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!previewState) return;
+    const gesture = previewGestureRef.current;
+    if (!gesture) return;
+
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+
+    if (!gesture.direction) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+        return;
+      }
+      gesture.direction = Math.abs(dx) > Math.abs(dy) ? "horizontal" : "vertical";
+      previewGestureRef.current = gesture;
+    }
+
+    if (gesture.direction === "horizontal") {
+      event.preventDefault();
+      setPreviewSwipeOffset(dx);
+    } else {
+      event.preventDefault();
+      setPreviewDragOffset(Math.max(dy, 0));
+    }
+  };
+
+  const handlePreviewPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!previewState) {
+      resetPreviewGesture(event.currentTarget, event.pointerId);
+      return;
+    }
+    const gesture = previewGestureRef.current;
+    if (!gesture) {
+      resetPreviewGesture(event.currentTarget, event.pointerId);
+      return;
+    }
+
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+
+    if (gesture.direction === "horizontal" && Math.abs(dx) > 80) {
+      showRelativePreviewPhoto(dx > 0 ? -1 : 1);
+    } else if (gesture.direction === "vertical" && dy > 120) {
+      closePhotoPreview();
+    }
+
+    resetPreviewGesture(event.currentTarget, event.pointerId);
+  };
+
+  const handlePreviewPointerCancel = (event: ReactPointerEvent<HTMLDivElement>) => {
+    resetPreviewGesture(event.currentTarget, event.pointerId);
+  };
+
+  useEffect(() => {
+    if (!previewState) {
+      return;
+    }
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closePhotoPreview();
+      } else if (event.key === "ArrowRight") {
+        showRelativePreviewPhoto(1);
+      } else if (event.key === "ArrowLeft") {
+        showRelativePreviewPhoto(-1);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeydown);
+    return () => {
+      window.removeEventListener("keydown", handleKeydown);
+    };
+  }, [previewState]);
 
   const handleCreateSubmit = async () => {
     if (!pendingFiles || pendingFiles.length === 0) {
@@ -746,6 +912,51 @@ export function MapPage() {
     });
   };
 
+  const handleRemoveExistingPhoto = (index: number) => {
+    setExistingPhotoUrls((current) => {
+      if (index < 0 || index >= current.length) {
+        return current;
+      }
+      const removedUrl = current[index];
+      if (removedUrl) {
+        setRemovedExistingPhotoUrls((prev) =>
+          prev.includes(removedUrl) ? prev : [...prev, removedUrl]
+        );
+      }
+      const next = current.filter((_, i) => i !== index);
+      return next;
+    });
+  };
+
+  const openPhotoPreview = (photos: string[], startIndex = 0) => {
+    if (!photos || photos.length === 0) return;
+    const clampedIndex = Math.min(Math.max(startIndex, 0), photos.length - 1);
+    setPreviewState({
+      photos,
+      index: clampedIndex,
+    });
+    setPreviewDragOffset(0);
+    setPreviewSwipeOffset(0);
+  };
+
+  const closePhotoPreview = () => {
+    setPreviewState(null);
+    setPreviewDragOffset(0);
+    setPreviewSwipeOffset(0);
+  };
+
+  const showRelativePreviewPhoto = (delta: number) => {
+    setPreviewState((current) => {
+      if (!current || current.photos.length === 0) {
+        return current;
+      }
+      const nextIndex =
+        (current.index + delta + current.photos.length) %
+        current.photos.length;
+      return { ...current, index: nextIndex };
+    });
+  };
+
   const handleRecenterOnUser = () => {
     if (!userLocation || !mapRef.current) return;
     mapRef.current.setView(userLocation as any, mapRef.current.getZoom());
@@ -755,11 +966,11 @@ export function MapPage() {
     setMapStyle((prev) => (prev === "normal" ? "satellite" : "normal"));
   };
 
-  const fetchBenchesForCurrentBounds = async (_mapOverride?: LeafletMap) => {
+    const fetchBenchesForCurrentBounds = async (_mapOverride?: LeafletMap) => {
     const { data, error } = await supabase
       .from("benches")
       .select(
-        "id, latitude, longitude, title, description, main_photo_url, status, created_by"
+        "id, latitude, longitude, title, description, main_photo_url, status, created_by, bench_photos(url, is_main)"
       );
 
     if (error || !data) {
@@ -769,16 +980,34 @@ export function MapPage() {
     const rows = data as BenchRow[];
 
     setBenches(
-      rows.map((row) => ({
-        id: row.id,
-        latitude: row.latitude,
-        longitude: row.longitude,
-        title: row.title,
-        description: row.description,
-        mainPhotoUrl: row.main_photo_url,
-        status: row.status,
-        createdBy: row.created_by,
-      }))
+      rows.map((row) => {
+        const sortedPhotos =
+          row.bench_photos
+            ?.slice()
+            .sort((a, b) => {
+              const aMain = a.is_main ? 0 : 1;
+              const bMain = b.is_main ? 0 : 1;
+              return aMain - bMain;
+            })
+            .map((photo) => photo.url)
+            .filter((url): url is string => !!url) ?? [];
+
+        return {
+          id: row.id,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          title: row.title,
+          description: row.description,
+          mainPhotoUrl: row.main_photo_url,
+          photoUrls: sortedPhotos.length
+            ? sortedPhotos
+            : row.main_photo_url
+            ? [row.main_photo_url]
+            : [],
+          status: row.status,
+          createdBy: row.created_by,
+        };
+      })
     );
   };
 
@@ -809,12 +1038,13 @@ export function MapPage() {
   useEffect(() => {
     if (addMode === "idle") {
       setEditingBench(null);
-      setRemoveExistingMainPhoto(false);
       setPendingFiles(null);
       setDraftDescription("");
       setChosenLocation(null);
       setLocationInput("");
       setSubmitError(null);
+      setExistingPhotoUrls([]);
+      setRemovedExistingPhotoUrls([]);
     }
   }, [addMode]);
 
@@ -874,6 +1104,36 @@ export function MapPage() {
 
   const mapCenter = center;
 
+  const handleStartChoosingLocation = () => {
+    const map = mapRef.current;
+    if (!map) {
+      setAddMode("choosing-location");
+      return;
+    }
+
+    const parsedFromInput = parseLatLngInput(locationInput);
+    const target =
+      parsedFromInput ??
+      (chosenLocation && Array.isArray(chosenLocation)
+        ? ([chosenLocation[0], chosenLocation[1]] as [number, number])
+        : userLocation && Array.isArray(userLocation)
+        ? ([userLocation[0], userLocation[1]] as [number, number])
+        : null);
+
+    if (target) {
+      map.closePopup();
+      map.setView({ lat: target[0], lng: target[1] }, CHOOSE_MODE_ZOOM, {
+        animate: true,
+      });
+      setChosenLocation([target[0], target[1]]);
+      setLocationInput(formatLatLngInput(target[0], target[1]));
+      setLocationInputDirty(false);
+      setLocationInputError(null);
+    }
+
+    setAddMode("choosing-location");
+  };
+
   return (
     <div className="relative h-dvh w-dvw overflow-hidden bg-slate-950">
       <MapContainer
@@ -905,7 +1165,15 @@ export function MapPage() {
 
         {userLocation && <Marker position={userLocation} icon={userIcon} />}
 
-        {benches.map((bench: Bench) => (
+        {benches.map((bench: Bench) => {
+          const popupPhotos =
+            bench.photoUrls && bench.photoUrls.length > 0
+              ? bench.photoUrls
+              : bench.mainPhotoUrl
+              ? [bench.mainPhotoUrl]
+              : [];
+
+          return (
           <Marker
             key={bench.id}
             position={[bench.latitude, bench.longitude]}
@@ -921,13 +1189,22 @@ export function MapPage() {
           >
             <Popup>
               <div className="flex max-w-[220px] flex-col gap-2">
-                {bench.mainPhotoUrl && (
-                  <div className="overflow-hidden rounded-lg border border-slate-200 shadow-sm">
-                    <img
-                      src={bench.mainPhotoUrl}
-                      alt={bench.description ?? "Bench"}
-                      className="block h-32 w-full object-cover"
-                    />
+                {popupPhotos.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {popupPhotos.map((url, index) => (
+                      <button
+                        key={`${url}-${index}`}
+                        type="button"
+                        className="relative flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/70 bg-white/40 shadow"
+                        onClick={() => openPhotoPreview(popupPhotos, index)}
+                      >
+                        <img
+                          src={url}
+                          alt={bench.description ?? "Bench photo"}
+                          className="h-full w-full object-cover"
+                        />
+                      </button>
+                    ))}
                   </div>
                 )}
                 {bench.description && (
@@ -960,7 +1237,8 @@ export function MapPage() {
               </div>
             </Popup>
           </Marker>
-        ))}
+        );
+        })}
       </MapContainer>
 
       {/* Map style + recenter controls */}
@@ -991,12 +1269,141 @@ export function MapPage() {
             onClick={handleRecenterOnUser}
             className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-md shadow-slate-900/40 hover:bg-slate-50"
           >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-400">
-              <span className="h-2 w-2 rounded-full bg-sky-500" />
-            </span>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinejoin="round"
+              className="h-5 w-5 text-slate-800"
+            >
+              <path d="M22 2 2 9l9 4 4 9Z" />
+            </svg>
           </button>
         )}
       </div>
+
+      {previewState && (
+        <div
+          className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/95 backdrop-blur-sm"
+          onClick={closePhotoPreview}
+        >
+          <div
+            className="relative flex w-full max-w-4xl flex-col items-center px-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="absolute right-6 top-6 z-[2100] flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-xl font-bold text-slate-900 shadow"
+              onClick={closePhotoPreview}
+            >
+              ×
+            </button>
+            <div
+              className="relative mt-8 flex w-full flex-col items-center"
+              onPointerDown={handlePreviewPointerDown}
+              onPointerMove={handlePreviewPointerMove}
+              onPointerUp={handlePreviewPointerUp}
+              onPointerCancel={handlePreviewPointerCancel}
+            >
+              <button
+                type="button"
+                className="absolute left-0 top-0 z-[2040] h-full w-1/2 cursor-pointer text-transparent"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  showRelativePreviewPhoto(-1);
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                className="absolute right-0 top-0 z-[2040] h-full w-1/2 cursor-pointer text-transparent"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  showRelativePreviewPhoto(1);
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                Next
+              </button>
+              <button
+                type="button"
+                className="absolute left-3 top-1/2 z-[2050] flex h-16 w-16 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-900 shadow-lg"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  showRelativePreviewPhoto(-1);
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="h-8 w-8 text-slate-900"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="15 6 9 12 15 18" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 z-[2050] flex h-16 w-16 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-900 shadow-lg"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  showRelativePreviewPhoto(1);
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="h-8 w-8 text-slate-900"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="9 6 15 12 9 18" />
+                </svg>
+              </button>
+              <div
+                className="relative w-full overflow-hidden rounded-2xl bg-black/40 shadow-2xl"
+                style={{
+                  height: "min(80vh, 900px)",
+                  transform: `translateY(${previewDragOffset}px)`,
+                  transition: previewDragOffset === 0 ? "transform 0.2s ease-out" : "none",
+                }}
+              >
+                <div
+                  className="flex h-full w-full items-center justify-center"
+                  style={{
+                    transform: `translateX(${previewSwipeOffset}px)`,
+                    transition: previewSwipeOffset === 0 ? "transform 0.2s ease-out" : "none",
+                  }}
+                >
+                  <img
+                    src={previewState.photos[previewState.index]}
+                    alt="Bench preview"
+                    className="max-h-full w-full object-contain"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-4 text-sm text-slate-100">
+                <span>
+                  {previewState.index + 1}/{previewState.photos.length}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top iOS-like title bar */}
       <MapHeader />
@@ -1028,6 +1435,7 @@ export function MapPage() {
         locationInput={locationInput}
         onLocationInputChange={handleLocationInputChange}
         onLocationInputBlur={handleLocationInputBlur}
+        onStartChoosingLocation={handleStartChoosingLocation}
         locationInputError={locationInputError}
         draftDescription={draftDescription}
         setDraftDescription={setDraftDescription}
@@ -1039,11 +1447,7 @@ export function MapPage() {
         movePhoto={movePhoto}
         openSignIn={openSignIn}
         mode={editingBench ? "edit" : "create"}
-        existingMainPhotoUrl={
-          editingBench && !removeExistingMainPhoto
-            ? editingBench.mainPhotoUrl ?? null
-            : null
-        }
+        existingPhotoUrls={existingPhotoUrls}
         canDelete={
           !!editingBench &&
           (isAdmin || (!!user && editingBench.createdBy === user.id))
@@ -1055,13 +1459,7 @@ export function MapPage() {
               }
             : undefined
         }
-        onRemoveExistingPhoto={
-          editingBench
-            ? () => {
-                setRemoveExistingMainPhoto(true);
-              }
-            : undefined
-        }
+        onRemoveExistingPhoto={editingBench ? handleRemoveExistingPhoto : undefined}
         submitError={submitError}
         isSubmitting={isSubmitting}
       />

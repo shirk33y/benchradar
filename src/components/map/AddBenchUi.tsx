@@ -11,6 +11,7 @@ export type AddBenchUiProps = {
   locationInput: string;
   onLocationInputChange: (value: string) => void;
   onLocationInputBlur: () => void;
+  onStartChoosingLocation: () => void;
   locationInputError: string | null;
   draftDescription: string;
   setDraftDescription: (value: string) => void;
@@ -24,10 +25,10 @@ export type AddBenchUiProps = {
   submitError: string | null;
   isSubmitting: boolean;
   mode?: "create" | "edit";
-  existingMainPhotoUrl?: string | null;
+  existingPhotoUrls?: string[];
   canDelete?: boolean;
   onDeleteBench?: () => void;
-  onRemoveExistingPhoto?: () => void;
+  onRemoveExistingPhoto?: (index: number) => void;
 };
 
 export function AddBenchUi({
@@ -38,6 +39,7 @@ export function AddBenchUi({
   locationInput,
   onLocationInputChange,
   onLocationInputBlur,
+  onStartChoosingLocation,
   locationInputError,
   draftDescription,
   setDraftDescription,
@@ -51,7 +53,7 @@ export function AddBenchUi({
   submitError,
   isSubmitting,
   mode = "create",
-  existingMainPhotoUrl = null,
+  existingPhotoUrls = [],
   canDelete = false,
   onDeleteBench,
   onRemoveExistingPhoto,
@@ -202,7 +204,7 @@ export function AddBenchUi({
                 <button
                   type="button"
                   className="rounded-full border border-slate-700/80 bg-slate-900/80 px-3 py-1 text-[11px] font-medium text-slate-100 active:scale-[0.98]"
-                  onClick={() => setAddMode("choosing-location")}
+                  onClick={onStartChoosingLocation}
                 >
                   Choose on map
                 </button>
@@ -230,24 +232,28 @@ export function AddBenchUi({
               <div className="mb-1 text-[11px] text-slate-400">Photos</div>
 
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {mode === "edit" && existingMainPhotoUrl && (
-                  <div className="relative flex h-20 w-20 items-center justify-center rounded-xl border border-slate-800/80 bg-slate-900/90">
-                    <img
-                      src={existingMainPhotoUrl}
-                      alt="Current photo"
-                      className="max-h-full max-w-full object-contain"
-                    />
-                    {onRemoveExistingPhoto && (
-                      <button
-                        type="button"
-                        className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/80 text-[9px] text-slate-950 shadow"
-                        onClick={onRemoveExistingPhoto}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                )}
+                {mode === "edit" &&
+                  existingPhotoUrls.map((url, index) => (
+                    <div
+                      key={`existing-${url}-${index}`}
+                      className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-slate-800/80 bg-slate-900/90"
+                    >
+                      <img
+                        src={url}
+                        alt="Current photo"
+                        className="h-full w-full object-cover"
+                      />
+                      {onRemoveExistingPhoto && (
+                        <button
+                          type="button"
+                          className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/80 text-[9px] text-slate-950 shadow"
+                          onClick={() => onRemoveExistingPhoto(index)}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
 
                 {pendingFileList.map((file, index) => (
                   <div
@@ -271,7 +277,7 @@ export function AddBenchUi({
                     <img
                       src={URL.createObjectURL(file)}
                       alt={file.name}
-                      className="max-h-full max-w-full object-contain"
+                      className="h-full w-full object-cover"
                     />
                     <button
                       type="button"
