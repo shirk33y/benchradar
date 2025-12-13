@@ -137,6 +137,7 @@ function toThumbnailUrl(url: string): string {
 }
 
 const CHOOSE_MODE_ZOOM = 16;
+const RECENTER_ZOOM = 16;
 const VALIDATION_HINT = "Enter coordinates like 54.647800,-2.150950";
 
 function parseLatLngInput(value: string): [number, number] | null {
@@ -959,7 +960,8 @@ export function MapPage() {
 
   const handleRecenterOnUser = () => {
     if (!userLocation || !mapRef.current) return;
-    mapRef.current.setView(userLocation as any, mapRef.current.getZoom());
+    mapRef.current.setView(userLocation as any, RECENTER_ZOOM, { animate: true });
+    setCenter(userLocation);
   };
 
   const handleToggleMapStyle = () => {
@@ -1275,10 +1277,11 @@ export function MapPage() {
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              strokeLinecap="round"
               strokeLinejoin="round"
               className="h-5 w-5 text-slate-800"
             >
-              <path d="M22 2 2 9l9 4 4 9Z" />
+              <path d="M3 10 21 3l-7 18-3.5-7.5L3 10Z" />
             </svg>
           </button>
         )}
@@ -1307,72 +1310,81 @@ export function MapPage() {
               onPointerUp={handlePreviewPointerUp}
               onPointerCancel={handlePreviewPointerCancel}
             >
-              <button
-                type="button"
-                className="absolute left-0 top-0 z-[2040] h-full w-1/2 cursor-pointer text-transparent"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  showRelativePreviewPhoto(-1);
-                }}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                className="absolute right-0 top-0 z-[2040] h-full w-1/2 cursor-pointer text-transparent"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  showRelativePreviewPhoto(1);
-                }}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                Next
-              </button>
-              <button
-                type="button"
-                className="absolute left-3 top-1/2 z-[2050] flex h-16 w-16 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-900 shadow-lg"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  showRelativePreviewPhoto(-1);
-                }}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  className="h-8 w-8 text-slate-900"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="15 6 9 12 15 18" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="absolute right-3 top-1/2 z-[2050] flex h-16 w-16 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-900 shadow-lg"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  showRelativePreviewPhoto(1);
-                }}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  className="h-8 w-8 text-slate-900"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="9 6 15 12 9 18" />
-                </svg>
-              </button>
+              {previewState.photos.length > 1 && previewState.index > 0 && (
+                <>
+                  <button
+                    type="button"
+                    className="absolute left-0 top-0 z-[2040] h-full w-1/2 cursor-pointer text-transparent"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      showRelativePreviewPhoto(-1);
+                    }}
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute left-3 top-1/2 z-[2050] flex h-16 w-16 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-900 shadow-lg"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      showRelativePreviewPhoto(-1);
+                    }}
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      className="h-8 w-8 text-slate-900"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="15 6 9 12 15 18" />
+                    </svg>
+                  </button>
+                </>
+              )}
+              {previewState.photos.length > 1 &&
+                previewState.index < previewState.photos.length - 1 && (
+                  <>
+                    <button
+                      type="button"
+                      className="absolute right-0 top-0 z-[2040] h-full w-1/2 cursor-pointer text-transparent"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        showRelativePreviewPhoto(1);
+                      }}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      Next
+                    </button>
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 z-[2050] flex h-16 w-16 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-900 shadow-lg"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        showRelativePreviewPhoto(1);
+                      }}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        className="h-8 w-8 text-slate-900"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="9 6 15 12 9 18" />
+                      </svg>
+                    </button>
+                  </>
+                )}
               <div
                 className="relative w-full overflow-hidden rounded-2xl bg-black/40 shadow-2xl"
                 style={{
