@@ -95,7 +95,7 @@ const compressImage = imageCompression as unknown as (
   }
 ) => Promise<File>;
 
-async function convertToJpeg(
+async function convertToWebp(
   file: File,
   maxSize: number
 ): Promise<File> {
@@ -114,17 +114,17 @@ async function convertToJpeg(
   ctx.drawImage(bitmap, 0, 0, width, height);
 
   const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob((b) => resolve(b), "image/jpeg", 0.9)
+    canvas.toBlob((b) => resolve(b), "image/webp", 0.72)
   );
 
   if (!blob) {
-    throw new Error("JPEG conversion failed");
+    throw new Error("WEBP conversion failed");
   }
 
   return new File(
     [blob],
-    file.name.replace(/\.[^.]+$/, "") + ".jpg",
-    { type: "image/jpeg" }
+    file.name.replace(/\.[^.]+$/, "") + ".webp",
+    { type: "image/webp" }
   );
 }
 
@@ -453,17 +453,17 @@ export function MapPage() {
 
       if (pendingFiles && pendingFiles.length > 0) {
         for (const file of pendingFiles) {
-          const largeJpeg = await convertToJpeg(file, 1080);
-          const thumbJpeg = await convertToJpeg(file, 48);
+          const largeWebp = await convertToWebp(file, 900);
+          const thumbWebp = await convertToWebp(file, 48);
 
           const id = crypto.randomUUID();
-          const largePath = `${user.id}/${id}.jpg`;
-          const thumbPath = `${user.id}/${id}_thumb.jpg`;
+          const largePath = `${user.id}/${id}.webp`;
+          const thumbPath = `${user.id}/${id}_thumb.webp`;
 
           const { error: uploadError } = await supabase.storage
             .from("bench_photos")
-            .upload(largePath, largeJpeg, {
-              contentType: "image/jpeg",
+            .upload(largePath, largeWebp, {
+              contentType: "image/webp",
               upsert: false,
             });
 
@@ -474,8 +474,8 @@ export function MapPage() {
 
           await supabase.storage
             .from("bench_photos")
-            .upload(thumbPath, thumbJpeg, {
-              contentType: "image/jpeg",
+            .upload(thumbPath, thumbWebp, {
+              contentType: "image/webp",
               upsert: false,
             });
 
@@ -636,6 +636,22 @@ export function MapPage() {
     }
 
     setAuthLoading(false);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setAuthError(null);
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}`,
+      },
+    });
+    if (error) {
+      setAuthError("Google sign-in failed. Please try again.");
+      setAuthLoading(false);
+    }
+    // On success, Supabase redirects away, so no need to reset loading here.
   };
 
   const startEditingBench = (bench: Bench) => {
@@ -819,17 +835,17 @@ export function MapPage() {
       const uploadedUrls: string[] = [];
 
       for (const file of pendingFiles) {
-        const largeJpeg = await convertToJpeg(file, 1080);
-        const thumbJpeg = await convertToJpeg(file, 48);
+        const largeWebp = await convertToWebp(file, 900);
+        const thumbWebp = await convertToWebp(file, 48);
 
         const id = crypto.randomUUID();
-        const largePath = `${user.id}/${id}.jpg`;
-        const thumbPath = `${user.id}/${id}_thumb.jpg`;
+        const largePath = `${user.id}/${id}.webp`;
+        const thumbPath = `${user.id}/${id}_thumb.webp`;
 
         const { error: uploadError } = await supabase.storage
           .from("bench_photos")
-          .upload(largePath, largeJpeg, {
-            contentType: "image/jpeg",
+          .upload(largePath, largeWebp, {
+            contentType: "image/webp",
             upsert: false,
           });
 
@@ -840,8 +856,8 @@ export function MapPage() {
 
         await supabase.storage
           .from("bench_photos")
-          .upload(thumbPath, thumbJpeg, {
-            contentType: "image/jpeg",
+          .upload(thumbPath, thumbWebp, {
+            contentType: "image/webp",
             upsert: false,
           });
 
@@ -1526,6 +1542,7 @@ export function MapPage() {
         setAuthEmail={setAuthEmail}
         setAuthPassword={setAuthPassword}
         handleAuthSubmit={handleAuthSubmit}
+        handleGoogleSignIn={handleGoogleSignIn}
       />
     </div>
   );

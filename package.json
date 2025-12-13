@@ -7,7 +7,10 @@
     "build": "npm run icons && vite build",
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs",
-    "lint": "eslint src --ext .ts,.tsx"
+    "lint": "eslint src --ext .ts,.tsx",
+    "tsc": "tsc",
+    "migrate:photos": "node --max-old-space-size=2048 scripts/migrate-bench-photos-to-webp.mjs",
+    "regen:thumbs": "node --max-old-space-size=1024 scripts/regenerate-thumbnails.mjs"
   },
   "dependencies": {
     "react": "^19.2.1",
