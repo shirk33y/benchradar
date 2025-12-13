@@ -3,6 +3,7 @@ import { useMapUiStore } from "../../store/useMapUiStore";
 export type HamburgerMenuProps = {
   isSignedIn: boolean;
   isAdmin: boolean;
+  userEmail?: string | null;
   openSignIn: () => void;
   handleSignOut: () => void;
   onGoToAdmin: () => void;
@@ -11,6 +12,7 @@ export type HamburgerMenuProps = {
 export function HamburgerMenu({
   isSignedIn,
   isAdmin,
+  userEmail,
   openSignIn,
   handleSignOut,
   onGoToAdmin,
@@ -38,8 +40,14 @@ export function HamburgerMenu({
           />
 
           <div className="absolute bottom-24 left-6 w-64 rounded-3xl border border-slate-800/70 bg-slate-900/95 px-3 py-3 text-slate-50 shadow-[0_20px_45px_rgba(15,23,42,0.95)]">
-            <div className="mb-2 text-xs text-slate-400">
-              {isSignedIn ? <span>Signed in</span> : <span>Not signed in</span>}
+            <div className="mb-2 text-xs text-slate-400 text-center">
+              {isSignedIn ? (
+                <span className="font-mono text-[11px] text-slate-200">
+                  {userEmail ?? "Signed in"}
+                </span>
+              ) : (
+                <span>Not signed in</span>
+              )}
             </div>
             <div className="flex flex-col gap-1 text-sm">
               {!isSignedIn && (

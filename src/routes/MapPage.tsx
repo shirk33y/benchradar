@@ -335,6 +335,7 @@ export function MapPage() {
   } = useMapUiStore();
 
   const isSignedIn = !!user;
+  const userEmail = user?.email ?? null;
   const pendingFileList = pendingFiles ?? [];
 
   const handleFilesSelected = async (files: FileList | null) => {
@@ -1166,21 +1167,29 @@ export function MapPage() {
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png"
-            keepBuffer={4}
-            updateWhenIdle={false}
-            updateInterval={200}
             tileSize={256}
             detectRetina
+            keepBuffer={5}
+            updateWhenIdle={false}
+            updateWhenZooming
+            updateInterval={80}
+            minZoom={3}
+            maxZoom={19}
+            crossOrigin
           />
         ) : (
           <TileLayer
             attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            keepBuffer={4}
-            updateWhenIdle={false}
-            updateInterval={200}
             tileSize={256}
             detectRetina
+            keepBuffer={5}
+            updateWhenIdle={false}
+            updateWhenZooming
+            updateInterval={80}
+            minZoom={3}
+            maxZoom={19}
+            crossOrigin
           />
         )}
 
@@ -1268,12 +1277,15 @@ export function MapPage() {
         <button
           type="button"
           onClick={handleToggleMapStyle}
-          className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-md shadow-slate-900/40 hover:bg-slate-50"
+          className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-md shadow-slate-900/40 transition active:scale-95 active:bg-slate-100"
         >
           {mapStyle === "normal" ? (
-            <span className="flex h-6 w-6 items-center justify-center rounded-sm border border-slate-300 bg-slate-100">
-              <span className="h-3 w-4 rounded-[2px] bg-sky-400" />
-            </span>
+            <img
+              src="/satellite.svg"
+              alt="Enable satellite view"
+              className="h-6 w-6"
+              draggable={false}
+            />
           ) : (
             <span className="grid h-6 w-6 grid-cols-2 gap-[1px] rounded-sm border border-slate-300 bg-slate-100">
               <span className="bg-slate-200" />
@@ -1288,7 +1300,7 @@ export function MapPage() {
           <button
             type="button"
             onClick={handleRecenterOnUser}
-            className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-md shadow-slate-900/40 hover:bg-slate-50"
+            className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-md shadow-slate-900/40 transition active:scale-95 active:bg-slate-100"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -1298,7 +1310,7 @@ export function MapPage() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-5 w-5 text-slate-800"
+              className="relative top-0.5 h-5 w-5 text-slate-800"
             >
               <path d="M3 10 21 3l-7 18-3.5-7.5L3 10Z" />
             </svg>
@@ -1500,6 +1512,7 @@ export function MapPage() {
       <HamburgerMenu
         isSignedIn={isSignedIn}
         isAdmin={isAdmin}
+        userEmail={userEmail}
         openSignIn={openSignIn}
         handleSignOut={handleSignOut}
         onGoToAdmin={() => navigate("/admin")}

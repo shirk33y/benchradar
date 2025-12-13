@@ -5,3 +5,15 @@
   color-scheme: dark;
   --br-aqua-bg: color-mix(in srgb, rgba(15, 23, 42, 0.85) 70%, #22d3ee 30%);
 }
+
+.leaflet-control-attribution {
+  font-size: 10px;
+  padding: 0 4px !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+  color: rgba(248, 250, 252, 0.8) !important;
+}
+
+.leaflet-control-attribution a {
+  color: rgba(248, 250, 252, 0.95) !important;
+  text-decoration: none;
+}

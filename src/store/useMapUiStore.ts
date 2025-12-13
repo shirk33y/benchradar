@@ -24,15 +24,31 @@ export const useMapUiStore = create<MapUiState>(
         | ((state: MapUiState) => Partial<MapUiState>),
     ) => void,
   ) => ({
-  isMenuOpen: false,
-  isAddOpen: false,
-  addMode: "idle",
-  authMode: "closed",
-  setMenuOpen: (open: boolean) => set({ isMenuOpen: open }),
-  toggleMenu: () => set((state) => ({ isMenuOpen: !state.isMenuOpen })),
-  setAddOpen: (open: boolean) => set({ isAddOpen: open }),
-  toggleAdd: () => set((state) => ({ isAddOpen: !state.isAddOpen })),
-  setAddMode: (mode: AddMode) => set({ addMode: mode }),
-  setAuthMode: (mode: AuthMode) => set({ authMode: mode }),
+    isMenuOpen: false,
+    isAddOpen: false,
+    addMode: "idle",
+    authMode: "closed",
+    setMenuOpen: (open: boolean) =>
+      set((state) => ({
+        isMenuOpen: open,
+        isAddOpen: open ? false : state.isAddOpen,
+      })),
+    toggleMenu: () =>
+      set((state) => ({
+        isMenuOpen: !state.isMenuOpen,
+        isAddOpen: state.isMenuOpen ? state.isAddOpen : false,
+      })),
+    setAddOpen: (open: boolean) =>
+      set((state) => ({
+        isAddOpen: open,
+        isMenuOpen: open ? false : state.isMenuOpen,
+      })),
+    toggleAdd: () =>
+      set((state) => ({
+        isAddOpen: !state.isAddOpen,
+        isMenuOpen: state.isAddOpen ? state.isMenuOpen : false,
+      })),
+    setAddMode: (mode: AddMode) => set({ addMode: mode }),
+    setAuthMode: (mode: AuthMode) => set({ authMode: mode }),
   }),
 );
