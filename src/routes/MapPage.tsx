@@ -958,13 +958,21 @@ export function MapPage() {
     });
   };
 
+  const closeAnyPopup = () => {
+    if (mapRef.current) {
+      mapRef.current.closePopup();
+    }
+  };
+
   const handleRecenterOnUser = () => {
     if (!userLocation || !mapRef.current) return;
+    closeAnyPopup();
     mapRef.current.setView(userLocation as any, RECENTER_ZOOM, { animate: true });
     setCenter(userLocation);
   };
 
   const handleToggleMapStyle = () => {
+    closeAnyPopup();
     setMapStyle((prev) => (prev === "normal" ? "satellite" : "normal"));
   };
 
@@ -1459,6 +1467,7 @@ export function MapPage() {
         movePhoto={movePhoto}
         openSignIn={openSignIn}
         mode={editingBench ? "edit" : "create"}
+        onFabPress={closeAnyPopup}
         existingPhotoUrls={existingPhotoUrls}
         canDelete={
           !!editingBench &&

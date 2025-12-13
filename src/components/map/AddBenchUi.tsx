@@ -29,6 +29,7 @@ export type AddBenchUiProps = {
   canDelete?: boolean;
   onDeleteBench?: () => void;
   onRemoveExistingPhoto?: (index: number) => void;
+  onFabPress?: () => void;
 };
 
 export function AddBenchUi({
@@ -57,6 +58,7 @@ export function AddBenchUi({
   canDelete = false,
   onDeleteBench,
   onRemoveExistingPhoto,
+  onFabPress,
 }: AddBenchUiProps) {
   const { addMode, isAddOpen, toggleAdd, setAddOpen, setAddMode } = useMapUiStore();
 
@@ -72,7 +74,10 @@ export function AddBenchUi({
             type="button"
             className="absolute bottom-8 right-6 z-[1000] inline-flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 via-cyan-300 to-emerald-300 text-slate-950 shadow-[0_18px_40px_rgba(56,189,248,0.55)] outline-none ring-2 ring-sky-300/40 transition active:scale-95"
             aria-label="Add a bench"
-            onClick={toggleAdd}
+            onClick={() => {
+              onFabPress?.();
+              toggleAdd();
+            }}
           >
             <span className="text-3xl leading-none">+</span>
           </button>
