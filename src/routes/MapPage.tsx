@@ -591,16 +591,15 @@ export function MapPage() {
     }
 
     setBenches(benches.filter((b: Bench) => b.id !== bench.id));
-    if (addMode === "idle") {
-      setEditingBench(null);
-      setPendingFiles(null);
-      setDraftDescription("");
-      setChosenLocation(null);
-      setLocationInput("");
-      setSubmitError(null);
-      setExistingPhotoUrls([]);
-      setRemovedExistingPhotoUrls([]);
-    }
+    setAddMode("idle");
+    setEditingBench(null);
+    setPendingFiles(null);
+    setDraftDescription("");
+    setChosenLocation(null);
+    setLocationInput("");
+    setSubmitError(null);
+    setExistingPhotoUrls([]);
+    setRemovedExistingPhotoUrls([]);
   };
 
   const openSignIn = () => {
