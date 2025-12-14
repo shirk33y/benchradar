@@ -17,3 +17,15 @@
   color: rgba(248, 250, 252, 0.95) !important;
   text-decoration: none;
 }
+
+.leaflet-popup-content-wrapper {
+  padding: 0.75em 0.5em 0.4em !important;
+}
+
+.leaflet-popup-content {
+  margin: 0.2em 0 !important;
+}
+
+.leaflet-popup-close-button {
+  display: none !important;
+}

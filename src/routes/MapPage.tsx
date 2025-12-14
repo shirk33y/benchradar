@@ -6,6 +6,7 @@ import {
   type Map as LeafletMap,
 } from "leaflet";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet-edgebuffer";
 import { useNavigate } from "react-router-dom";
 import type { User } from "@supabase/supabase-js";
@@ -52,6 +53,7 @@ function createBenchPhotoIcon(url: string, status: Bench["status"]) {
       <div class="flex h-10 w-10 items-center justify-center rounded-[12px] border-2 border-white bg-white overflow-hidden ring-2 ${ringClass}">
         <img
           src="${thumbUrl}"
+          loading="lazy"
           onerror="this.onerror=null;this.src='${url}'"
           class="block h-full w-full object-cover object-center"
         />
@@ -1058,72 +1060,81 @@ export function MapPage() {
 
         {userLocation && <Marker position={userLocation} icon={userIcon} />}
 
-        {benches.map((bench: Bench) => {
-          const popupPhotos =
-            bench.photoUrls && bench.photoUrls.length > 0
-              ? bench.photoUrls
-              : bench.mainPhotoUrl
-              ? [bench.mainPhotoUrl]
-              : [];
+        <MarkerClusterGroup
+          chunkedLoading
+          showCoverageOnHover={false}
+          spiderfyOnMaxZoom
+          zoomToBoundsOnClick
+          maxClusterRadius={64}
+        >
+          {benches.map((bench: Bench) => {
+            const popupPhotos =
+              bench.photoUrls && bench.photoUrls.length > 0
+                ? bench.photoUrls
+                : bench.mainPhotoUrl
+                ? [bench.mainPhotoUrl]
+                : [];
 
-          return (
-          <Marker
-            key={bench.id}
-            position={[bench.latitude, bench.longitude]}
-            icon={
-              bench.mainPhotoUrl
-                ? createBenchPhotoIcon(bench.mainPhotoUrl, bench.status)
-                : bench.status === "pending"
-                ? pendingIcon
-                : bench.status === "rejected"
-                ? rejectedIcon
-                : approvedIcon
-            }
-          >
-            <Popup>
-              <div className="flex max-w-[220px] flex-col gap-2">
-                {popupPhotos.length > 0 && (
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {popupPhotos.map((url, _index) => (
+            return (
+              <Marker
+                key={bench.id}
+                position={[bench.latitude, bench.longitude]}
+                icon={
+                  bench.mainPhotoUrl
+                    ? createBenchPhotoIcon(bench.mainPhotoUrl, bench.status)
+                    : bench.status === "pending"
+                    ? pendingIcon
+                    : bench.status === "rejected"
+                    ? rejectedIcon
+                    : approvedIcon
+                }
+              >
+                <Popup closeButton={false}>
+                  <div className="flex max-w-[220px] flex-col gap-2">
+                    {bench.description && (
+                      <div className="text-xs text-slate-800">
+                        {bench.description}
+                      </div>
+                    )}
+                    {popupPhotos.length > 0 && (
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {popupPhotos.map((url, _index) => (
+                          <button
+                            key={`${url}-${_index}`}
+                            type="button"
+                            className="relative flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/70 bg-white/40 shadow"
+                            onClick={() => openPhotoPreview(popupPhotos, _index)}
+                          >
+                            <img
+                              src={url}
+                              loading="lazy"
+                              alt={bench.description ?? "Bench photo"}
+                              className="h-full w-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {(isAdmin || (user && bench.createdBy === user.id)) && (
                       <button
-                        key={`${url}-${_index}`}
                         type="button"
-                        className="relative flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/70 bg-white/40 shadow"
-                        onClick={() => openPhotoPreview(popupPhotos, _index)}
+                        className="mt-1 inline-flex self-start rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-slate-50"
+                        onClick={() => startEditingBench(bench)}
                       >
-                        <img
-                          src={url}
-                          alt={bench.description ?? "Bench photo"}
-                          className="h-full w-full object-cover"
-                        />
+                        Edit
                       </button>
-                    ))}
+                    )}
+                    {isAdmin && bench.status === "pending" && (
+                      <div className="mt-1 inline-flex self-start rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                        Pending
+                      </div>
+                    )}
                   </div>
-                )}
-                {bench.description && (
-                  <div className="text-xs text-slate-800">
-                    {bench.description}
-                  </div>
-                )}
-                {(isAdmin || (user && bench.createdBy === user.id)) && (
-                  <button
-                    type="button"
-                    className="mt-1 inline-flex self-start rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-slate-50"
-                    onClick={() => startEditingBench(bench)}
-                  >
-                    Edit
-                  </button>
-                )}
-                {isAdmin && bench.status === "pending" && (
-                  <div className="mt-1 inline-flex self-start rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                    Pending
-                  </div>
-                )}
-              </div>
-            </Popup>
-          </Marker>
-        );
-        })}
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MarkerClusterGroup>
       </MapContainer>
 
       {/* Map style + recenter controls */}
