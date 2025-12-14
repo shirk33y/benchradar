@@ -24,11 +24,6 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
       - name: Run E2E tests (local Supabase + Dockerized Playwright)
         env:
           CI: "true"
