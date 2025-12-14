@@ -9,11 +9,16 @@
     "icons": "node scripts/generate-icons.mjs",
     "lint": "eslint src --ext .ts,.tsx",
     "tsc": "tsc",
+    "test": "vitest --config vitest.config.mts",
+    "test:unit": "vitest --config vitest.config.mts",
+    "test:unit:ci": "vitest run --config vitest.config.mts",
     "migrate:photos": "node --max-old-space-size=2048 scripts/migrate-bench-photos-to-webp.mjs",
     "regen:thumbs": "node --max-old-space-size=1024 scripts/regenerate-thumbnails.mjs",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
-    "test:integration": "bash scripts/run-integration-tests.sh"
+    "test:e2e": "bash scripts/run-e2e-tests.sh",
+    "trace:show": "npx playwright show-trace",
+    "trace:show:last": "bash -lc 'TRACE=$(ls -t test-results/**/trace.zip 2>/dev/null | head -n 1); test -n \"${TRACE}\"; npx playwright show-trace \"${TRACE}\"'"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.2",
@@ -32,6 +37,8 @@
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.57.0",
     "@tailwindcss/vite": "^4.1.17",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
     "@types/leaflet": "^1.9.21",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -41,9 +48,11 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "jsdom": "^25.0.1",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.17",
     "typescript": "^5.9.3",
-    "vite": "^7.2.6"
+    "vite": "^7.2.6",
+    "vitest": "^2.1.9"
   }
 }

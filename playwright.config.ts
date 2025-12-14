@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./tests",
+  testDir: "./e2e",
   timeout: 60_000,
   expect: {
     timeout: 15_000,
@@ -22,11 +22,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort",
+    command: "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort --logLevel error",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: process.env.PW_REUSE_EXISTING_SERVER === "1",
     timeout: 120_000,
     env: {
+      VITE_E2E: "1",
       VITE_SUPABASE_URL: process.env.API_URL ?? "",
       VITE_SUPABASE_ANON_KEY: process.env.ANON_KEY ?? "",
     },

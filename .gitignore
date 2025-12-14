@@ -6,9 +6,13 @@ npm-debug.log*
 # Vite
 /dist
 .vite/
+.vite-cache/
 .supabase/
 playwright-report/
 test-results/
+
+# Vitest
+.vitest-cache/
 
 # Deno
 .deno/

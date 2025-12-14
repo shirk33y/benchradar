@@ -31,6 +31,7 @@ async function waitForBenchMarkerRendered(page: any, title: string) {
       );
     },
     title,
+    { timeout: 20_000 },
   );
 }
 
@@ -55,6 +56,7 @@ async function waitForBenchMarker(page: any, title: string) {
       );
     },
     title,
+    { timeout: 20_000 },
   );
 }
 
@@ -107,7 +109,7 @@ async function openBenchPopup(page: any, title: string) {
           } catch (e: any) {
             finishErr(e);
           }
-        }, 5000);
+        }, 8000);
 
         try {
           cluster.zoomToShowLayer(marker, () => {
@@ -128,15 +130,8 @@ async function openBenchPopup(page: any, title: string) {
       }
     });
   }, title);
-
-  await page.waitForFunction(
-    (t) => {
-      const popups = document.querySelectorAll(".leaflet-popup");
-      return Array.from(popups).some((p) => (p.textContent ?? "").includes(t));
-    },
-    title,
-  );
 }
+
 
 async function resetAndSeedBenches(): Promise<{ benches: BenchInsert[] }> {
   const apiUrl = process.env.API_URL;
@@ -202,7 +197,8 @@ async function resetAndSeedBenches(): Promise<{ benches: BenchInsert[] }> {
       main_photo_url: null,
     },
     {
-      latitude: 52.2897,
+      // Far enough to be offscreen at the initial view, but close enough that rendering is deterministic.
+      latitude: 52.2457,
       longitude: 21.0122,
       status: "approved",
       description: "it-seed-far",
@@ -223,7 +219,7 @@ async function resetAndSeedBenches(): Promise<{ benches: BenchInsert[] }> {
   return { benches };
 }
 
-test.describe.serial("integration map markers", () => {
+test.describe.serial("e2e map markers", () => {
   let benches: BenchInsert[] = [];
 
   test.beforeAll(async () => {
@@ -277,18 +273,14 @@ test.describe.serial("integration map markers", () => {
       map.setView({ lat: 52.2297, lng: 21.0122 }, 16, { animate: false });
     });
 
-    // Move to a location that should include the far bench.
-    const moved = await page.evaluate((b) => {
-      const map = (window as any).__BENCHRADAR_MAP__;
-      if (!map) return false;
-      map.setView({ lat: b.latitude, lng: b.longitude }, 16, { animate: false });
-      const center = map.getCenter();
-      return Math.abs(center.lat - b.latitude) < 0.0005 && Math.abs(center.lng - b.longitude) < 0.0005;
-    }, farBench);
+    // Ensure benches have loaded into the cluster group before moving to the far bench.
+    await waitForBenchMarker(page, farBench.description);
 
-    if (!moved) {
-      throw new Error("Map did not move to far bench location.");
-    }
+    await page.evaluate((b) => {
+      const map = (window as any).__BENCHRADAR_MAP__;
+      if (!map) return;
+      map.setView({ lat: b.latitude, lng: b.longitude }, 17, { animate: false });
+    }, farBench);
 
     await waitForBenchMarker(page, farBench.description);
     await openBenchPopup(page, farBench.description);

@@ -2,7 +2,12 @@
 set -euo pipefail
 
 # Starts local Supabase if needed, optionally resets the local DB if schema isn't present,
-# then runs Playwright integration tests inside the Playwright Docker image.
+# then runs Playwright E2E tests inside the Playwright Docker image.
+
+export DOCKER_HIDE_LEGACY_PROGRESS=1
+export NPM_CONFIG_FUND=false
+export NPM_CONFIG_AUDIT=false
+export NPM_CONFIG_UPDATE_NOTIFIER=false
 
 ensure_supabase_running() {
   if node scripts/export-local-supabase-env.mjs >/dev/null 2>&1; then
@@ -25,8 +30,6 @@ export_local_supabase_env() {
 }
 
 schema_looks_migrated() {
-  # Detect whether schema exists by probing a table via PostgREST.
-  # If the table doesn't exist or PostgREST isn't ready, we'll get a non-200.
   local url
   url="${REST_URL%/}/benches?select=id&limit=1"
 
@@ -41,13 +44,11 @@ schema_looks_migrated() {
       return 0
     fi
 
-    # 000 = curl couldn't connect yet. 502/503 can happen while services start.
     if [[ "$code" == "000" || "$code" == "502" || "$code" == "503" ]]; then
       sleep 1
       continue
     fi
 
-    # Give a brief grace period for PostgREST/schema to settle.
     sleep 1
   done
 
@@ -63,16 +64,19 @@ maybe_reset_db() {
   echo "Local DB not migrated yet (or PostgREST not ready). Running supabase db reset..."
   npx supabase db reset --local --yes
 
-  # After reset, refresh env vars.
   export_local_supabase_env
 }
 
 run_playwright_in_docker() {
+  docker pull -q mcr.microsoft.com/playwright:v1.57.0-jammy >/dev/null 2>&1 || true
+
   docker run --rm --network host \
     -e API_URL -e ANON_KEY -e SERVICE_ROLE_KEY \
+    -e NPM_CONFIG_FUND=false -e NPM_CONFIG_AUDIT=false -e NPM_CONFIG_UPDATE_NOTIFIER=false \
+    -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     -v "$PWD":/work -w /work \
     mcr.microsoft.com/playwright:v1.57.0-jammy \
-    bash -lc "npm ci && npx playwright test"
+    bash -lc "npm ci --silent --no-fund --no-audit && npx playwright test"
 }
 
 main() {
