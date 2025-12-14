@@ -24,10 +24,22 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Run E2E tests (local Supabase + Dockerized Playwright)
+      - name: Install/start Supabase
         env:
           CI: "true"
           DOCKER_HIDE_LEGACY_PROGRESS: "1"
           COMPOSE_PROGRESS: quiet
-          SUPABASE_START_ARGS: "--exclude studio,edge-runtime"
-        run: bash scripts/run-e2e-tests.sh
+        run: |
+          npx supabase start --exclude studio,edge-runtime
+          npx supabase db reset --local --yes
+          node scripts/export-local-supabase-env.mjs --format=github-env >> "$GITHUB_ENV"
+
+      - name: Install/start Playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        env:
+          CI: "true"
+        run: npx playwright test

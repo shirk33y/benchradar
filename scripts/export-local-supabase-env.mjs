@@ -45,13 +45,35 @@ function printShellExports() {
   }
 }
 
+function printGithubEnv() {
+  const status = getLocalSupabaseStatus();
+  const entries = {
+    API_URL: status.API_URL,
+    ANON_KEY: status.ANON_KEY,
+    REST_URL: status.REST_URL,
+    SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY,
+  };
+
+  for (const [key, value] of Object.entries(entries)) {
+    if (value) {
+      process.stdout.write(`${key}=${value}\n`);
+    }
+  }
+}
+
 if (
   typeof process !== "undefined" &&
   process.argv[1] &&
   fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
 ) {
   try {
-    printShellExports();
+    const formatArg = process.argv.find((a) => a.startsWith("--format="));
+    const format = formatArg ? formatArg.split("=")[1] : "shell";
+    if (format === "github-env") {
+      printGithubEnv();
+    } else {
+      printShellExports();
+    }
   } catch (error) {
     console.error("Failed to read local Supabase status:", error.message);
     process.exit(1);
