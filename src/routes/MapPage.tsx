@@ -3,13 +3,10 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   divIcon,
   type LatLngExpression,
-  type LatLngTuple,
   type Map as LeafletMap,
 } from "leaflet";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet-edgebuffer";
-import imageCompression from "browser-image-compression";
-import * as exifr from "exifr";
 import { useNavigate } from "react-router-dom";
 import type { User } from "@supabase/supabase-js";
 
@@ -21,19 +18,11 @@ import { MapHeader } from "../components/map/MapHeader";
 import { HamburgerMenu } from "../components/map/HamburgerMenu";
 import { AuthModal } from "../components/map/AuthModal";
 import { AddBenchUi } from "../components/map/AddBenchUi";
+import { convertToWebp, toThumbnailUrl } from "../lib/imageProcessing";
+import { extractGpsFromFiles } from "../lib/photoMetadata";
+import { LAT_LNG_HINT, parseLatLngInput, formatLatLngInput } from "../lib/geo";
 
 const DEFAULT_CENTER: LatLngExpression = [52.2297, 21.0122]; // Warsaw as a neutral default
-
-type BenchRow = {
-  id: string;
-  latitude: number;
-  longitude: number;
-  title: string | null;
-  description: string | null;
-  main_photo_url: string | null;
-  status: "pending" | "approved" | "rejected";
-  created_by: string;
-};
 
 type BenchPhotoRow = {
   bench_id: string;
@@ -87,184 +76,8 @@ const userIcon = divIcon({
   iconAnchor: [7, 7],
 });
 
-async function convertToWebp(
-  file: File,
-  maxSize: number
-): Promise<File> {
-  const bitmap = await createImageBitmap(file);
-
-  const scale = Math.min(maxSize / bitmap.width, maxSize / bitmap.height, 1);
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("No canvas context");
-
-  ctx.drawImage(bitmap, 0, 0, width, height);
-
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob((b) => resolve(b), "image/webp", 0.72)
-  );
-
-  if (!blob) {
-    throw new Error("WEBP conversion failed");
-  }
-
-  return new File(
-    [blob],
-    file.name.replace(/\.[^.]+$/, "") + ".webp",
-    { type: "image/webp" }
-  );
-}
-
-function toThumbnailUrl(url: string): string {
-  const [base, query] = url.split("?", 2);
-  const lastDot = base.lastIndexOf(".");
-  if (lastDot === -1) return url;
-  const withThumb = `${base.slice(0, lastDot)}_thumb${base.slice(lastDot)}`;
-  return query ? `${withThumb}?${query}` : withThumb;
-}
-
 const CHOOSE_MODE_ZOOM = 16;
 const RECENTER_ZOOM = 16;
-const VALIDATION_HINT = "Enter coordinates like 54.647800,-2.150950";
-
-function parseLatLngInput(value: string): [number, number] | null {
-  const normalized = value
-    .replace(/[^\d.,\-\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!normalized) {
-    return null;
-  }
-
-  const parts = normalized.split(/[, ]+/).filter(Boolean);
-  if (parts.length < 2) {
-    return null;
-  }
-
-  const lat = Number(parts[0]);
-  const lng = Number(parts[1]);
-
-  if (
-    Number.isNaN(lat) ||
-    Number.isNaN(lng) ||
-    lat < -90 ||
-    lat > 90 ||
-    lng < -180 ||
-    lng > 180
-  ) {
-    return null;
-  }
-
-  return [lat, lng];
-}
-
-function formatLatLngInput(lat: number, lng: number): string {
-  return `${lat.toFixed(6)},${lng.toFixed(6)}`;
-}
-
-type ParsedGpsMetadata = {
-  latitude?: number;
-  longitude?: number;
-  GPSLatitude?: number[];
-  GPSLongitude?: number[];
-  GPSLatitudeRef?: string;
-  GPSLongitudeRef?: string;
-};
-
-function isNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function dmsToDecimal(value: unknown, ref?: unknown): number | null {
-  if (Array.isArray(value) && value.length > 0) {
-    const [degRaw, minRaw = 0, secRaw = 0] = value as number[];
-    if (typeof degRaw !== "number") {
-      return null;
-    }
-    const min = typeof minRaw === "number" ? minRaw : 0;
-    const sec = typeof secRaw === "number" ? secRaw : 0;
-    let decimal = degRaw + min / 60 + sec / 3600;
-    if (
-      typeof ref === "string" &&
-      (ref.toUpperCase() === "S" || ref.toUpperCase() === "W")
-    ) {
-      decimal *= -1;
-    }
-    return decimal;
-  }
-
-  if (isNumber(value)) {
-    let decimal = value;
-    if (
-      typeof ref === "string" &&
-      (ref.toUpperCase() === "S" || ref.toUpperCase() === "W")
-    ) {
-      decimal *= -1;
-    }
-    return decimal;
-  }
-
-  return null;
-}
-
-async function tryExtractGpsFromFile(file: File): Promise<LatLngTuple | null> {
-  try {
-    const gps = await exifr.gps(file);
-    if (gps && isNumber(gps.latitude) && isNumber(gps.longitude)) {
-      return [gps.latitude, gps.longitude];
-    }
-  } catch (_err) {
-    // ignore and try fallback parsing
-  }
-
-  try {
-    const parsed = (await exifr.parse(file, {
-      pick: [
-        "latitude",
-        "longitude",
-        "GPSLatitude",
-        "GPSLongitude",
-        "GPSLatitudeRef",
-        "GPSLongitudeRef",
-      ],
-    })) as ParsedGpsMetadata | undefined | null;
-
-    if (!parsed) return null;
-
-    const lat =
-      isNumber(parsed.latitude)
-        ? parsed.latitude
-        : dmsToDecimal(parsed.GPSLatitude, parsed.GPSLatitudeRef);
-    const lng =
-      isNumber(parsed.longitude)
-        ? parsed.longitude
-        : dmsToDecimal(parsed.GPSLongitude, parsed.GPSLongitudeRef);
-
-    if (isNumber(lat) && isNumber(lng)) {
-      return [lat, lng];
-    }
-  } catch (_err) {
-    // no-op; fall back to manual selection
-  }
-
-  return null;
-}
-
-async function extractGpsFromFiles(files: File[]): Promise<LatLngTuple | null> {
-  for (const file of files) {
-    const coords = await tryExtractGpsFromFile(file);
-    if (coords) {
-      return coords;
-    }
-  }
-  return null;
-}
 
 export function MapPage() {
   const [center, setCenter] = useState(DEFAULT_CENTER as LatLngExpression);
@@ -314,14 +127,8 @@ export function MapPage() {
   const navigate = useNavigate();
 
   const {
-    isMenuOpen,
-    isAddOpen,
     addMode,
-    authMode,
-    toggleMenu,
-    toggleAdd,
     setMenuOpen,
-    setAddOpen,
     setAddMode,
     setAuthMode,
   } = useMapUiStore();
@@ -371,7 +178,7 @@ export function MapPage() {
 
   const validateLocationInputValue = (value: string): string | null => {
     if (!value.trim()) {
-      return VALIDATION_HINT;
+      return LAT_LNG_HINT;
     }
     return parseLatLngInput(value) ? null : "Coordinates must be valid lat,lng values";
   };
@@ -512,7 +319,7 @@ export function MapPage() {
       }
 
       if (uploadedUrls.length > 0) {
-        const photoRows = uploadedUrls.map((url, index) => ({
+        const photoRows = uploadedUrls.map((url) => ({
           bench_id: editingBench.id,
           url,
           is_main: mainPhotoUrl === url,
@@ -1270,12 +1077,12 @@ export function MapPage() {
               <div className="flex max-w-[220px] flex-col gap-2">
                 {popupPhotos.length > 0 && (
                   <div className="flex gap-2 overflow-x-auto pb-1">
-                    {popupPhotos.map((url, index) => (
+                    {popupPhotos.map((url, _index) => (
                       <button
-                        key={`${url}-${index}`}
+                        key={`${url}-${_index}`}
                         type="button"
                         className="relative flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/70 bg-white/40 shadow"
-                        onClick={() => openPhotoPreview(popupPhotos, index)}
+                        onClick={() => openPhotoPreview(popupPhotos, _index)}
                       >
                         <img
                           src={url}

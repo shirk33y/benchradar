@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { LatLngExpression } from "leaflet";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { User } from "@supabase/supabase-js";
 
@@ -12,66 +11,13 @@ import {
   parseLatLngInput,
 } from "../lib/geo";
 import { BenchEditorForm } from "../components/bench/BenchEditorForm";
-
-type BenchPhotoRow = { url: string; is_main: boolean | null };
-
-type BenchAdminRow = Bench & {
-  createdBy: string;
-  createdAt: string;
-  photoUrls: string[];
-};
-
-type TabKey = "pending" | "rejected" | "approved";
-
-type TabState = {
-  items: BenchAdminRow[];
-  loading: boolean;
-  loadingMore: boolean;
-  initialized: boolean;
-  endReached: boolean;
-  lastCursor: string | null;
-};
-
-const TAB_KEYS = ["pending", "rejected", "approved"] as const;
-
-function isTabKey(value: string | undefined): value is TabKey {
-  if (!value) return false;
-  return (TAB_KEYS as readonly string[]).includes(value);
-}
-
-const TAB_CONFIG: Record<
-  TabKey,
-  { label: string; accent: string; empty: string }
-> = {
-  pending: {
-    label: "NEW",
-    accent: "from-amber-500/10 via-amber-300/60 to-transparent",
-    empty: "No new benches",
-  },
-  rejected: {
-    label: "REJECTED",
-    accent: "from-rose-500/10 via-rose-300/60 to-transparent",
-    empty: "No rejected benches",
-  },
-  approved: {
-    label: "APPROVED",
-    accent: "from-emerald-500/10 via-emerald-300/60 to-transparent",
-    empty: "No approved benches",
-  },
-};
-
-const PAGE_SIZE = 12;
-
-function createInitialTabState(): TabState {
-  return {
-    items: [],
-    loading: false,
-    loadingMore: false,
-    initialized: false,
-    endReached: false,
-    lastCursor: null,
-  };
-}
+import {
+  TAB_CONFIG,
+  type BenchAdminRow,
+  type TabKey,
+  useAdminTabs,
+  isTabKey,
+} from "../hooks/useAdminTabs";
 
 export function AdminPage() {
   const params = useParams<{ tabKey?: string }>();
@@ -79,15 +25,18 @@ export function AdminPage() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabKey>(initialRouteTab);
-  const [tabState, setTabState] = useState<Record<TabKey, TabState>>({
-    pending: createInitialTabState(),
-    rejected: createInitialTabState(),
-    approved: createInitialTabState(),
-  });
   const [error, setError] = useState<string | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+
+  const {
+    activeTab,
+    setActiveTab,
+    activeTabState,
+    sentinelRef,
+    removeBenchFromTabs,
+    insertBenchIntoTab,
+    updateBenchInTabs,
+  } = useAdminTabs(initialRouteTab, isAdmin, { onError: setError });
 
   useEffect(() => {
     let cancelled = false;
@@ -131,240 +80,6 @@ export function AdminPage() {
       cancelled = true;
     };
   }, []);
-
-  const loadTabPage = useCallback(
-    async (tab: TabKey) => {
-      const state = tabState[tab];
-      if (state.loading || state.loadingMore || state.endReached) return;
-
-      const isInitial = !state.initialized;
-
-      setTabState((prev) => ({
-        ...prev,
-        [tab]: {
-          ...prev[tab],
-          loading: isInitial,
-          loadingMore: !isInitial,
-        },
-      }));
-
-      let query = supabase
-        .from("benches")
-        .select(
-          "id, latitude, longitude, title, description, main_photo_url, status, created_by, created_at, bench_photos(url, is_main)"
-        )
-        .eq("status", tab)
-        .order("created_at", { ascending: false })
-        .limit(PAGE_SIZE);
-
-      if (state.lastCursor) {
-        query = query.lt("created_at", state.lastCursor);
-      }
-
-      const { data, error: fetchError } = await query;
-
-      if (fetchError) {
-        setError("Loading benches failed.");
-        setTabState((prev) => ({
-          ...prev,
-          [tab]: {
-            ...prev[tab],
-            loading: false,
-            loadingMore: false,
-          },
-        }));
-        return;
-      }
-
-      const mapped: BenchAdminRow[] =
-        data?.map((row) => {
-          const photos = (row.bench_photos as BenchPhotoRow[] | null) ?? [];
-          const sortedPhotos = [...photos].sort((a, b) => {
-            if (a.is_main && !b.is_main) return -1;
-            if (!a.is_main && b.is_main) return 1;
-            return 0;
-          });
-          const photoUrls =
-            sortedPhotos.length > 0
-              ? sortedPhotos.map((p) => p.url)
-              : row.main_photo_url
-              ? [row.main_photo_url]
-              : [];
-          return {
-            id: row.id,
-            latitude: row.latitude,
-            longitude: row.longitude,
-            title: row.title,
-            description: row.description,
-            mainPhotoUrl: row.main_photo_url,
-            status: row.status as Bench["status"],
-            createdBy: row.created_by,
-            createdAt: row.created_at,
-            photoUrls,
-          };
-        }) ?? [];
-
-      setTabState((prev) => {
-        const prevTab = prev[tab];
-        const merged = isInitial ? mapped : [...prevTab.items, ...mapped];
-        return {
-          ...prev,
-          [tab]: {
-            ...prevTab,
-            items: merged,
-            loading: false,
-            loadingMore: false,
-            initialized: true,
-            lastCursor:
-              mapped.length > 0
-                ? mapped[mapped.length - 1].createdAt
-                : prevTab.lastCursor,
-            endReached: mapped.length < PAGE_SIZE,
-          },
-        };
-      });
-    },
-    [tabState]
-  );
-
-  const activeTabState = tabState[activeTab];
-  const pendingState = tabState.pending;
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    if (
-      pendingState.initialized ||
-      pendingState.loading ||
-      pendingState.loadingMore
-    ) {
-      return;
-    }
-    loadTabPage("pending");
-  }, [
-    isAdmin,
-    loadTabPage,
-    pendingState.initialized,
-    pendingState.loading,
-    pendingState.loadingMore,
-  ]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    if (
-      activeTabState.initialized ||
-      activeTabState.loading ||
-      activeTabState.loadingMore ||
-      activeTab === "pending"
-    ) {
-      return;
-    }
-    loadTabPage(activeTab);
-  }, [
-    activeTab,
-    activeTabState.initialized,
-    activeTabState.loading,
-    activeTabState.loadingMore,
-    isAdmin,
-    loadTabPage,
-  ]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    if (!activeTabState.initialized) return;
-    if (activeTabState.endReached) return;
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-
-        if (
-          entry.isIntersecting &&
-          !activeTabState.loading &&
-          !activeTabState.loadingMore &&
-          !activeTabState.endReached
-        ) {
-          loadTabPage(activeTab);
-        }
-      },
-      { rootMargin: "200px 0px 0px 0px" }
-    );
-
-    observer.observe(sentinel);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [
-    activeTab,
-    activeTabState.endReached,
-    activeTabState.initialized,
-    activeTabState.loading,
-    activeTabState.loadingMore,
-    isAdmin,
-    loadTabPage,
-  ]);
-
-  const removeBenchFromTabs = useCallback((benchId: string) => {
-    setTabState((prev) => {
-      let changed = false;
-      const next: Record<TabKey, TabState> = { ...prev };
-      (Object.keys(prev) as TabKey[]).forEach((tab) => {
-        const exists = prev[tab].items.some((b) => b.id === benchId);
-        if (exists) {
-          changed = true;
-          next[tab] = {
-            ...prev[tab],
-            items: prev[tab].items.filter((b) => b.id !== benchId),
-          };
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, []);
-
-  const insertBenchIntoTab = useCallback(
-    (bench: BenchAdminRow, tab: TabKey) => {
-      setTabState((prev) => {
-        const current = prev[tab];
-        if (!current.initialized) {
-          return prev;
-        }
-        return {
-          ...prev,
-          [tab]: {
-            ...current,
-            items: [bench, ...current.items],
-          },
-        };
-      });
-    },
-    []
-  );
-
-  const updateBenchInTabs = useCallback(
-    (benchId: string, updater: (bench: BenchAdminRow) => BenchAdminRow) => {
-      setTabState((prev) => {
-        let changed = false;
-        const next: Record<TabKey, TabState> = { ...prev };
-
-        (Object.keys(prev) as TabKey[]).forEach((tab) => {
-          const idx = prev[tab].items.findIndex((b) => b.id === benchId);
-          if (idx !== -1) {
-            changed = true;
-            const updatedBench = updater(prev[tab].items[idx]);
-            const newItems = [...prev[tab].items];
-            newItems[idx] = updatedBench;
-            next[tab] = { ...prev[tab], items: newItems };
-          }
-        });
-
-        return changed ? next : prev;
-      });
-    },
-    []
-  );
 
   const handleChangeStatus = async (
     bench: BenchAdminRow,
@@ -434,8 +149,6 @@ export function AdminPage() {
   const [editingLocationError, setEditingLocationError] = useState<
     string | null
   >(null);
-  const [editingChosenLocation, setEditingChosenLocation] =
-    useState<LatLngExpression | null>(null);
   const [editingPendingFiles, setEditingPendingFiles] = useState<File[]>([]);
   const [editingExistingPhotoUrls, setEditingExistingPhotoUrls] = useState<
     string[]
@@ -456,7 +169,6 @@ export function AdminPage() {
     setEditingLocationInput(formatLatLngInput(bench.latitude, bench.longitude));
     setEditingLocationDirty(false);
     setEditingLocationError(null);
-    setEditingChosenLocation([bench.latitude, bench.longitude]);
     setEditingPendingFiles([]);
     setEditingRemovedPhotoUrls([]);
     setEditingSubmitError(null);
@@ -475,7 +187,6 @@ export function AdminPage() {
     setEditingLocationInput("");
     setEditingLocationDirty(false);
     setEditingLocationError(null);
-    setEditingChosenLocation(null);
     setEditingPendingFiles([]);
     setEditingExistingPhotoUrls([]);
     setEditingRemovedPhotoUrls([]);
@@ -545,7 +256,6 @@ export function AdminPage() {
     const parsed = parseLatLngInput(editingLocationInput);
     if (!parsed) return;
     const [lat, lng] = parsed;
-    setEditingChosenLocation([lat, lng]);
     setEditingLocationInput(formatLatLngInput(lat, lng));
   };
 

@@ -26,10 +26,15 @@ export default [
     rules: {
       // Rely on TypeScript for undefineds; DOM globals confuse core rule
       "no-undef": "off",
-      // Unused vars are noisy in early stages; can be re-enabled later
       "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": "off",
-
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
       "no-console": "warn",
       "react/react-in-jsx-scope": "off",
       "react/prop-types": "off",

@@ -30,3 +30,11 @@ export async function convertToWebp(
     { type: "image/webp" }
   );
 }
+
+export function toThumbnailUrl(url: string): string {
+  const [base, query] = url.split("?", 2);
+  const lastDot = base.lastIndexOf(".");
+  if (lastDot === -1) return url;
+  const withThumb = `${base.slice(0, lastDot)}_thumb${base.slice(lastDot)}`;
+  return query ? `${withThumb}?${query}` : withThumb;
+}
