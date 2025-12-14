@@ -5,6 +5,7 @@ set -euo pipefail
 # then runs Playwright E2E tests inside the Playwright Docker image.
 
 export DOCKER_HIDE_LEGACY_PROGRESS=1
+export COMPOSE_PROGRESS=quiet
 export NPM_CONFIG_FUND=false
 export NPM_CONFIG_AUDIT=false
 export NPM_CONFIG_UPDATE_NOTIFIER=false
@@ -68,9 +69,11 @@ maybe_reset_db() {
 }
 
 run_playwright_in_docker() {
-  docker pull -q mcr.microsoft.com/playwright:v1.57.0-jammy >/dev/null 2>&1 || true
+  if ! docker image inspect mcr.microsoft.com/playwright:v1.57.0-jammy >/dev/null 2>&1; then
+    docker pull -q mcr.microsoft.com/playwright:v1.57.0-jammy >/dev/null 2>&1 || true
+  fi
 
-  docker run --rm --network host \
+  docker run --rm --network host --pull=never \
     -e API_URL -e ANON_KEY -e SERVICE_ROLE_KEY \
     -e NPM_CONFIG_FUND=false -e NPM_CONFIG_AUDIT=false -e NPM_CONFIG_UPDATE_NOTIFIER=false \
     -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
