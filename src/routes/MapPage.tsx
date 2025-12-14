@@ -8,7 +8,7 @@ import {
   type LatLngExpression,
   type Map as LeafletMap,
 } from "leaflet";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet-edgebuffer";
 import { useNavigate } from "react-router-dom";
@@ -27,6 +27,12 @@ import { extractGpsFromFiles } from "../lib/photoMetadata";
 import { LAT_LNG_HINT, parseLatLngInput, formatLatLngInput } from "../lib/geo";
 
 const DEFAULT_CENTER: LatLngExpression = [52.2297, 21.0122]; // Warsaw as a neutral default
+
+declare global {
+  interface Window {
+    __BENCHRADAR_MAP__?: LeafletMap;
+  }
+}
 
 type BenchPhotoRow = {
   bench_id: string;
@@ -1007,6 +1013,28 @@ export function MapPage() {
 
   const mapCenter = center;
 
+  const MapBridge = () => {
+    const mapInstance = useMap();
+
+    useEffect(() => {
+      mapRef.current = mapInstance;
+
+      window.__BENCHRADAR_MAP__ = mapInstance;
+
+      void fetchBenchesForCurrentBounds(mapInstance);
+      const onMoveEnd = () => {
+        void fetchBenchesForCurrentBounds(mapInstance);
+      };
+      mapInstance.on("moveend", onMoveEnd);
+
+      return () => {
+        mapInstance.off("moveend", onMoveEnd);
+      };
+    }, [mapInstance]);
+
+    return null;
+  };
+
   const handleStartChoosingLocation = () => {
     const map = mapRef.current;
     if (!map) {
@@ -1047,15 +1075,8 @@ export function MapPage() {
         zoomAnimation
         className="z-0 h-full w-full"
         ref={mapRef}
-        whenReady={() => {
-          const mapInstance = mapRef.current;
-          if (!mapInstance) return;
-          void fetchBenchesForCurrentBounds(mapInstance);
-          mapInstance.on("moveend", () => {
-            void fetchBenchesForCurrentBounds(mapInstance);
-          });
-        }}
       >
+        <MapBridge />
         {mapStyle === "normal" ? (
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -1109,6 +1130,7 @@ export function MapPage() {
               <Marker
                 key={bench.id}
                 position={[bench.latitude, bench.longitude]}
+                title={bench.description ?? bench.id}
                 icon={
                   bench.mainPhotoUrl
                     ? createBenchPhotoIcon(bench.mainPhotoUrl, bench.status)

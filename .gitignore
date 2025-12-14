@@ -4,8 +4,11 @@ node_modules/
 npm-debug.log*
 
 # Vite
-/dist/
+/dist
 .vite/
+.supabase/
+playwright-report/
+test-results/
 
 # Deno
 .deno/
