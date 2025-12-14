@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type {
+  PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
+} from "react";
 import {
   divIcon,
   type LatLngExpression,
@@ -764,6 +767,32 @@ export function MapPage() {
     setPreviewSwipeOffset(0);
   };
 
+  const handlePopupGalleryWheel = (
+    event: ReactWheelEvent<HTMLDivElement>
+  ) => {
+    const container = event.currentTarget;
+    if (!container) return;
+    const dominantDelta =
+      Math.abs(event.deltaX) > Math.abs(event.deltaY)
+        ? event.deltaX
+        : event.deltaY;
+
+    if (dominantDelta === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof container.scrollBy === "function") {
+      container.scrollBy({
+        left: dominantDelta,
+        behavior: "smooth",
+      });
+    } else {
+      container.scrollLeft += dominantDelta;
+    }
+  };
+
   const closePhotoPreview = () => {
     setPreviewState(null);
     setPreviewDragOffset(0);
@@ -1097,7 +1126,10 @@ export function MapPage() {
                       </div>
                     )}
                     {popupPhotos.length > 0 && (
-                      <div className="flex gap-2 overflow-x-auto pb-1">
+                      <div
+                        className="popup-gallery flex gap-2 overflow-x-auto pb-1"
+                        onWheel={handlePopupGalleryWheel}
+                      >
                         {popupPhotos.map((url, _index) => (
                           <button
                             key={`${url}-${_index}`}
