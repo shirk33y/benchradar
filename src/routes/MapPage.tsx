@@ -7,6 +7,7 @@ import {
   type Map as LeafletMap,
 } from "leaflet";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet-edgebuffer";
 import imageCompression from "browser-image-compression";
 import * as exifr from "exifr";
 import { useNavigate } from "react-router-dom";
@@ -85,15 +86,6 @@ const userIcon = divIcon({
   iconSize: [14, 14],
   iconAnchor: [7, 7],
 });
-
-const compressImage = imageCompression as unknown as (
-  file: File,
-  options: {
-    maxSizeMB: number;
-    maxWidthOrHeight: number;
-    useWebWorker: boolean;
-  }
-) => Promise<File>;
 
 async function convertToWebp(
   file: File,
@@ -1128,6 +1120,22 @@ export function MapPage() {
     };
   }, [setBenches, user]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    const stored = sessionStorage.getItem("admin_edit_bench");
+    if (!stored) return;
+    try {
+      const parsed: Bench = JSON.parse(stored);
+      const existing = benches.find((b) => b.id === parsed.id);
+      if (existing) {
+        startEditingBench(existing);
+        sessionStorage.removeItem("admin_edit_bench");
+      }
+    } catch {
+      sessionStorage.removeItem("admin_edit_bench");
+    }
+  }, [benches, isAdmin]);
+
   const mapCenter = center;
 
   const handleStartChoosingLocation = () => {
@@ -1186,6 +1194,7 @@ export function MapPage() {
             tileSize={256}
             detectRetina
             keepBuffer={5}
+            edgeBufferTiles={2}
             updateWhenIdle={false}
             updateWhenZooming
             updateInterval={80}
@@ -1200,6 +1209,7 @@ export function MapPage() {
             tileSize={256}
             detectRetina
             keepBuffer={5}
+            edgeBufferTiles={2}
             updateWhenIdle={false}
             updateWhenZooming
             updateInterval={80}
@@ -1267,17 +1277,9 @@ export function MapPage() {
                     Edit
                   </button>
                 )}
-                {isAdmin && (
-                  <div
-                    className={`mt-1 inline-flex self-start rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      bench.status === "approved"
-                        ? "bg-emerald-500/15 text-emerald-300"
-                        : bench.status === "pending"
-                        ? "bg-amber-500/15 text-amber-300"
-                        : "bg-rose-500/15 text-rose-300"
-                    }`}
-                  >
-                    {bench.status}
+                {isAdmin && bench.status === "pending" && (
+                  <div className="mt-1 inline-flex self-start rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                    Pending
                   </div>
                 )}
               </div>

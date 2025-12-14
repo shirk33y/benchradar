@@ -63,13 +63,21 @@ export function HamburgerMenu({
               {isSignedIn && isAdmin && (
                 <button
                   type="button"
-                  className="flex items-center justify-between rounded-2xl bg-slate-800/90 px-3 py-2 text-slate-100 active:scale-[0.98]"
+                  className="flex items-center justify-between rounded-2xl border border-sky-500/40 bg-slate-900/90 px-3 py-2 text-[13px] font-semibold text-sky-200 shadow-inner shadow-slate-900/40 active:scale-[0.98]"
                   onClick={() => {
                     setMenuOpen(false);
                     onGoToAdmin();
                   }}
                 >
                   <span>Admin panel</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    className="h-4 w-4 fill-current"
+                    aria-hidden="true"
+                  >
+                    <path d="M11.293 4.293a1 1 0 0 1 1.414 0l4 3.999a1 1 0 0 1 0 1.414l-4 4.001a1 1 0 0 1-1.414-1.414L13.586 10H4a1 1 0 0 1 0-2h9.586l-2.293-2.293a1 1 0 0 1 0-1.414Z" />
+                  </svg>
                 </button>
               )}
 

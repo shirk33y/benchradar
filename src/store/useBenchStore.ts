@@ -10,6 +10,7 @@ export type Bench = {
   photoUrls?: string[];
   createdBy?: string;
   status: "pending" | "approved" | "rejected";
+  createdAt?: string;
 };
 
 export type BenchState = {

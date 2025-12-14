@@ -1,7 +1,8 @@
 import type { MutableRefObject, RefObject } from "react";
 import type { LatLngExpression } from "leaflet";
 
-import { useMapUiStore, type AddMode } from "../../store/useMapUiStore";
+import { useMapUiStore } from "../../store/useMapUiStore";
+import { BenchEditorForm } from "../bench/BenchEditorForm";
 
 export type AddBenchUiProps = {
   isSignedIn: boolean;
@@ -60,7 +61,8 @@ export function AddBenchUi({
   onRemoveExistingPhoto,
   onFabPress,
 }: AddBenchUiProps) {
-  const { addMode, isAddOpen, toggleAdd, setAddOpen, setAddMode } = useMapUiStore();
+  const { addMode, isAddOpen, toggleAdd, setAddOpen, setAddMode } =
+    useMapUiStore();
 
   const showIdle = addMode === "idle";
   const showChoosing = addMode === "choosing-location";
@@ -194,168 +196,40 @@ export function AddBenchUi({
             <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
               <div className="mx-auto h-1.5 w-10 rounded-full bg-slate-600/80" />
             </div>
-
-            <div className="mb-3 flex items-center justify-between text-xs text-slate-300">
-              <span className="font-medium">
-                {mode === "edit" ? "Edit bench" : "New bench"}
-              </span>
-            </div>
-
-            <div className="mt-1 flex flex-col gap-1 text-[11px] text-slate-300">
-              <div className="flex items-center justify-between">
-                <label className="font-medium text-slate-300">
-                  Coordinates
-                </label>
-                <button
-                  type="button"
-                  className="rounded-full border border-slate-700/80 bg-slate-900/80 px-3 py-1 text-[11px] font-medium text-slate-100 active:scale-[0.98]"
-                  onClick={onStartChoosingLocation}
-                >
-                  Choose on map
-                </button>
-              </div>
-              <input
-                type="text"
-                value={locationInput}
-                onChange={(e) => onLocationInputChange(e.target.value)}
-                onBlur={onLocationInputBlur}
-                placeholder={
-                  chosenLocation && Array.isArray(chosenLocation)
-                    ? `${(chosenLocation as [number, number])[0].toFixed(
-                        6,
-                      )},${(chosenLocation as [number, number])[1].toFixed(6)}`
-                    : "e.g. 54.647800,-2.150950"
-                }
-                className="w-full rounded-2xl border border-slate-700/80 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 outline-none focus:border-sky-400/70"
-              />
-              {locationInputError && (
-                <div className="text-[10px] text-rose-300">{locationInputError}</div>
-              )}
-            </div>
-
-            <div className="mt-3">
-              <div className="mb-1 text-[11px] text-slate-400">Photos</div>
-
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {mode === "edit" &&
-                  existingPhotoUrls.map((url, index) => (
-                    <div
-                      key={`existing-${url}-${index}`}
-                      className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-slate-800/80 bg-slate-900/90"
-                    >
-                      <img
-                        src={url}
-                        alt="Current photo"
-                        className="h-full w-full object-cover"
-                      />
-                      {onRemoveExistingPhoto && (
-                        <button
-                          type="button"
-                          className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/80 text-[9px] text-slate-950 shadow"
-                          onClick={() => onRemoveExistingPhoto(index)}
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-
-                {pendingFileList.map((file, index) => (
-                  <div
-                    key={`${file.name}-${index}`}
-                    draggable
-                    onDragStart={() => {
-                      dragFromIndexRef.current = index;
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const from = dragFromIndexRef.current;
-                      if (from === null || from === index) return;
-                      movePhoto(from, index);
-                      dragFromIndexRef.current = null;
-                    }}
-                    className="relative flex h-20 w-20 items-center justify-center rounded-xl border border-slate-800/80 bg-slate-900/90 text-[10px] text-slate-200"
-                  >
-                    <img
-                      src={URL.createObjectURL(file)}
-                      alt={file.name}
-                      className="h-full w-full object-cover"
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/80 text-[9px] text-slate-950 shadow"
-                      onClick={() => removePhoto(index)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  aria-label="Add photos"
-                  className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-slate-700/80 bg-slate-900/70 text-xl text-slate-300 active:scale-[0.99]"
-                  onClick={() => selectFileInputRef.current?.click()}
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <div className="mb-1 text-[11px] text-slate-400">Description</div>
-              <textarea
-                value={draftDescription}
-                onChange={(e) => setDraftDescription(e.target.value)}
-                rows={3}
-                className="w-full resize-none rounded-2xl border border-slate-700/80 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 outline-none focus:border-sky-400/70"
-                placeholder="Add a short note about this bench..."
-              />
-            </div>
-
-            <div className="mt-4 flex items-center justify-between text-xs">
-              {mode === "edit" && canDelete && onDeleteBench && (
-                <button
-                  type="button"
-                  className="rounded-2xl border border-rose-700/80 bg-rose-700/20 px-3 py-2 font-semibold text-rose-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-                  onClick={onDeleteBench}
-                  disabled={isSubmitting}
-                >
-                  Delete
-                </button>
-              )}
-
-              <div className="ml-auto flex gap-2">
-                <button
-                  type="button"
-                  className="rounded-2xl border border-slate-700/80 bg-slate-900/80 px-4 py-2 font-medium text-slate-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-                  onClick={() => setAddMode("idle")}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="rounded-2xl bg-sky-500/90 px-5 py-2 font-semibold text-slate-950 shadow-lg shadow-sky-900/70 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting
-                    ? mode === "edit"
-                      ? "Saving..."
-                      : "Submitting..."
-                    : mode === "edit"
-                    ? "Save"
-                    : "Continue"}
-                </button>
-              </div>
-            </div>
-            {submitError && (
-              <div className="mt-2 text-[11px] text-rose-300">{submitError}</div>
-            )}
+            <BenchEditorForm
+              mode={mode}
+              locationInput={locationInput}
+              onLocationInputChange={onLocationInputChange}
+              onLocationInputBlur={onLocationInputBlur}
+              locationInputError={locationInputError}
+              onStartChoosingLocation={onStartChoosingLocation}
+              locationPlaceholder={
+                chosenLocation && Array.isArray(chosenLocation)
+                  ? `${(chosenLocation as [number, number])[0].toFixed(
+                      6,
+                    )},${(chosenLocation as [number, number])[1].toFixed(6)}`
+                  : "e.g. 54.647800,-2.150950"
+              }
+              existingPhotoUrls={existingPhotoUrls}
+              onRemoveExistingPhoto={onRemoveExistingPhoto}
+              pendingFileList={pendingFileList}
+              dragFromIndexRef={dragFromIndexRef}
+              onReorderPendingPhoto={movePhoto}
+              onRemovePendingPhoto={removePhoto}
+              onAddPhotoClick={() => selectFileInputRef.current?.click()}
+              description={draftDescription}
+              onDescriptionChange={setDraftDescription}
+              onCancel={() => setAddMode("idle")}
+              onSubmit={handleSubmit}
+              submitLabels={{
+                idle: mode === "edit" ? "Save" : "Continue",
+                submitting: mode === "edit" ? "Saving..." : "Submitting...",
+              }}
+              canDelete={mode === "edit" && canDelete}
+              onDelete={mode === "edit" && canDelete ? onDeleteBench : undefined}
+              isSubmitting={isSubmitting}
+              submitError={submitError}
+            />
           </div>
         </div>
       )}
