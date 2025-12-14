@@ -31,14 +31,11 @@ jobs:
           COMPOSE_PROGRESS: quiet
         run: |
           EXCLUDES="studio,edge-runtime,mailpit,realtime,imgproxy,vector,logflare"
-          if ! npx supabase start --exclude "$EXCLUDES"; then
-            npx supabase start --exclude studio,edge-runtime
-          fi
+          npx supabase start --exclude "$EXCLUDES"
           node scripts/export-local-supabase-env.mjs --format=github-env >> "$GITHUB_ENV"
 
       - name: Install/start Playwright
         run: |
-          npm ci
           npx playwright install --with-deps chromium
 
       - name: Run E2E tests
