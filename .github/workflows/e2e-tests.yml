@@ -36,16 +36,6 @@ jobs:
           fi
           node scripts/export-local-supabase-env.mjs --format=github-env >> "$GITHUB_ENV"
 
-          code=$(curl -sS -o /dev/null -w "%{http_code}" \
-            -H "apikey: ${SERVICE_ROLE_KEY}" \
-            -H "Authorization: Bearer ${SERVICE_ROLE_KEY}" \
-            "${REST_URL%/}/benches?select=id&limit=1" || true)
-
-          if [[ "$code" != "200" ]]; then
-            npx supabase db reset --local --yes
-            node scripts/export-local-supabase-env.mjs --format=github-env >> "$GITHUB_ENV"
-          fi
-
       - name: Install/start Playwright
         run: |
           npm ci
