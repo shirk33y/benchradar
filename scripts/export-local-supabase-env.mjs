@@ -7,16 +7,27 @@ import path from "node:path";
 
 function supabaseStatusJson() {
   const cmd = "supabase status --output=json";
+  let lastError;
   try {
     return execSync(cmd, {
       encoding: "utf8",
-      stdio: ["ignore", "pipe", "inherit"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
-  } catch {
+  } catch (e) {
+    lastError = e;
+  }
+
+  try {
     return execSync(`npx ${cmd}`, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "inherit"],
     });
+  } catch (e) {
+    if (lastError) {
+      // Prefer the npx error (it should be actionable) but keep the first one for debugging.
+      e.message = `${e.message}\n(Also failed running directly: ${lastError.message})`;
+    }
+    throw e;
   }
 }
 

@@ -30,9 +30,21 @@ jobs:
           DOCKER_HIDE_LEGACY_PROGRESS: "1"
           COMPOSE_PROGRESS: quiet
         run: |
-          npx supabase start --exclude studio,edge-runtime
-          npx supabase db reset --local --yes
+          EXCLUDES="studio,edge-runtime,mailpit,realtime,imgproxy,vector,logflare"
+          if ! npx supabase start --exclude "$EXCLUDES"; then
+            npx supabase start --exclude studio,edge-runtime
+          fi
           node scripts/export-local-supabase-env.mjs --format=github-env >> "$GITHUB_ENV"
+
+          code=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SERVICE_ROLE_KEY}" \
+            "${REST_URL%/}/benches?select=id&limit=1" || true)
+
+          if [[ "$code" != "200" ]]; then
+            npx supabase db reset --local --yes
+            node scripts/export-local-supabase-env.mjs --format=github-env >> "$GITHUB_ENV"
+          fi
 
       - name: Install/start Playwright
         run: |
