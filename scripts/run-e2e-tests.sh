@@ -10,6 +10,14 @@ export NPM_CONFIG_FUND=false
 export NPM_CONFIG_AUDIT=false
 export NPM_CONFIG_UPDATE_NOTIFIER=false
 
+supabase_cmd() {
+  if command -v supabase >/dev/null 2>&1; then
+    supabase "$@"
+  else
+    npx supabase "$@"
+  fi
+}
+
 ensure_supabase_running() {
   if node scripts/export-local-supabase-env.mjs >/dev/null 2>&1; then
     echo "Supabase already running."
@@ -17,7 +25,11 @@ ensure_supabase_running() {
   fi
 
   echo "Starting Supabase..."
-  npx supabase start
+
+  # Optional for CI: e.g. SUPABASE_START_ARGS="--exclude studio,edge-runtime"
+  # shellcheck disable=SC2206
+  local start_args=(${SUPABASE_START_ARGS:-})
+  supabase_cmd start "${start_args[@]}"
 }
 
 export_local_supabase_env() {
@@ -63,7 +75,7 @@ maybe_reset_db() {
   fi
 
   echo "Local DB not migrated yet (or PostgREST not ready). Running supabase db reset..."
-  npx supabase db reset --local --yes
+  supabase_cmd db reset --local --yes
 
   export_local_supabase_env
 }

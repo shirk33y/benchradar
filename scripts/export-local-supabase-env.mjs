@@ -5,11 +5,23 @@ import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+function supabaseStatusJson() {
+  const cmd = "supabase status --output=json";
+  try {
+    return execSync(cmd, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+  } catch {
+    return execSync(`npx ${cmd}`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+  }
+}
+
 export function getLocalSupabaseStatus() {
-  const raw = execSync("npx supabase status --output=json", {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "inherit"],
-  });
+  const raw = supabaseStatusJson();
   const jsonStart = raw.indexOf("{");
   if (jsonStart === -1) {
     throw new Error("Unable to find JSON payload in Supabase status output.");

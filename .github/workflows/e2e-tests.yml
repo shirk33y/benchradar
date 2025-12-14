@@ -24,56 +24,15 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
-
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
-      - name: Start Supabase
-        env:
-          DOCKER_HIDE_LEGACY_PROGRESS: "1"
-          COMPOSE_PROGRESS: quiet
-        run: supabase start
-
-      - name: Reset local DB (apply migrations)
-        env:
-          DOCKER_HIDE_LEGACY_PROGRESS: "1"
-          COMPOSE_PROGRESS: quiet
-        run: supabase db reset --local --yes
-
-      - name: Export Supabase env
-        run: |
-          node - <<'NODE' >> "$GITHUB_ENV"
-          const { execSync } = require('node:child_process');
-          const raw = execSync('supabase status --output=json', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
-          const jsonStart = raw.indexOf('{');
-          if (jsonStart === -1) throw new Error('Unable to find JSON payload in Supabase status output.');
-          const status = JSON.parse(raw.slice(jsonStart));
-          for (const key of ['API_URL','ANON_KEY','SERVICE_ROLE_KEY','REST_URL']) {
-            if (status[key]) process.stdout.write(`${key}=${status[key]}\n`);
-          }
-          NODE
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
-
-      - name: Install Playwright (Chromium)
-        run: npx playwright install --with-deps chromium
-
       - name: Run E2E tests (local Supabase + Dockerized Playwright)
         env:
           CI: "true"
-        run: npx playwright test
-
-      - name: Stop Supabase (cleanup)
-        if: always()
-        env:
           DOCKER_HIDE_LEGACY_PROGRESS: "1"
           COMPOSE_PROGRESS: quiet
-        run: supabase stop
+          SUPABASE_START_ARGS: "--exclude studio,edge-runtime"
+        run: bash scripts/run-e2e-tests.sh
