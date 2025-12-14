@@ -13,7 +13,7 @@
     "regen:thumbs": "node --max-old-space-size=1024 scripts/regenerate-thumbnails.mjs",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
-    "test:integration": "bash -lc 'set -euo pipefail; if node scripts/export-local-supabase-env.mjs >/dev/null 2>&1; then echo \"Supabase already running.\"; else npx supabase start; fi; npx supabase db reset --local --yes; eval \"$(node scripts/export-local-supabase-env.mjs)\"; docker run --rm --network host -e API_URL -e ANON_KEY -e SERVICE_ROLE_KEY -v \"$PWD\":/work -w /work mcr.microsoft.com/playwright:v1.57.0-jammy bash -lc \"npm ci && npx playwright test\"'"
+    "test:integration": "bash scripts/run-integration-tests.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.2",

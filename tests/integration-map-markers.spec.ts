@@ -9,6 +9,31 @@ type BenchInsert = {
   main_photo_url?: string | null;
 };
 
+async function waitForBenchMarkerRendered(page: any, title: string) {
+  await page.waitForFunction(
+    (t) => {
+      const map = (window as any).__BENCHRADAR_MAP__;
+      if (!map) return false;
+
+      const layers = Object.values((map as any)._layers ?? {});
+      const cluster = layers.find((layer: any) => typeof layer?.zoomToShowLayer === "function");
+      if (!cluster || typeof cluster.getLayers !== "function") return false;
+
+      const markers = cluster.getLayers();
+      return markers.some(
+        (m: any) =>
+          m &&
+          m.options &&
+          m.options.title === t &&
+          typeof m.openPopup === "function" &&
+          typeof m.getLatLng === "function" &&
+          Boolean(m._icon),
+      );
+    },
+    title,
+  );
+}
+
 async function waitForBenchMarker(page: any, title: string) {
   await page.waitForFunction(
     (t) => {
@@ -40,6 +65,10 @@ async function openBenchPopup(page: any, title: string) {
         const map = (window as any).__BENCHRADAR_MAP__;
         if (!map) throw new Error("Missing __BENCHRADAR_MAP__");
 
+        if (typeof map.closePopup === "function") {
+          map.closePopup();
+        }
+
         const layers = Object.values((map as any)._layers ?? {});
         const cluster = layers.find(
           (layer: any) => typeof layer?.zoomToShowLayer === "function",
@@ -59,15 +88,41 @@ async function openBenchPopup(page: any, title: string) {
         );
         if (!marker) throw new Error(`Marker not found for title: ${t}`);
 
-        map.panTo(marker.getLatLng(), { animate: false });
-        cluster.zoomToShowLayer(marker, () => {
+        let done = false;
+        const finishOk = () => {
+          if (done) return;
+          done = true;
+          resolve();
+        };
+        const finishErr = (e: any) => {
+          if (done) return;
+          done = true;
+          reject(e);
+        };
+
+        const timeout = setTimeout(() => {
           try {
             marker.openPopup();
-            resolve();
+            finishOk();
           } catch (e: any) {
-            reject(e);
+            finishErr(e);
           }
-        });
+        }, 5000);
+
+        try {
+          cluster.zoomToShowLayer(marker, () => {
+            clearTimeout(timeout);
+            try {
+              marker.openPopup();
+              finishOk();
+            } catch (e: any) {
+              finishErr(e);
+            }
+          });
+        } catch (e: any) {
+          clearTimeout(timeout);
+          finishErr(e);
+        }
       } catch (e: any) {
         reject(e);
       }
@@ -168,64 +223,75 @@ async function resetAndSeedBenches(): Promise<{ benches: BenchInsert[] }> {
   return { benches };
 }
 
-test("seeded benches are visible as markers", async ({ page }) => {
-  const { benches } = await resetAndSeedBenches();
-  const nearBenches = benches.filter((b) => b.description !== "it-seed-far");
+test.describe.serial("integration map markers", () => {
+  let benches: BenchInsert[] = [];
 
-  await page.goto("/");
-
-  await page.waitForFunction(() => {
-    return Boolean((window as any).__BENCHRADAR_MAP__);
+  test.beforeAll(async () => {
+    ({ benches } = await resetAndSeedBenches());
   });
 
-  // Center map on seeded benches and zoom in to avoid clustering.
-  await page.evaluate(() => {
-    const map = (window as any).__BENCHRADAR_MAP__;
-    if (!map) return;
-    map.setView({ lat: 52.2297, lng: 21.0122 }, 16, { animate: false });
+  test("seeded benches are visible as markers", async ({ page }) => {
+    const nearBenches = benches.filter((b) => b.description !== "it-seed-far");
+
+    await page.goto("/");
+
+    await page.waitForFunction(() => {
+      return Boolean((window as any).__BENCHRADAR_MAP__);
+    });
+
+    // Center map on seeded benches and zoom in to avoid clustering.
+    await page.evaluate(() => {
+      const map = (window as any).__BENCHRADAR_MAP__;
+      if (!map) return;
+      map.setView({ lat: 52.2297, lng: 21.0122 }, 16, { animate: false });
+    });
+
+    // Wait for benches to load and render.
+    await page.waitForTimeout(800);
+
+    for (const bench of nearBenches) {
+      if (!bench.description) {
+        throw new Error("Seeded bench is missing description.");
+      }
+
+      await waitForBenchMarkerRendered(page, bench.description);
+      await openBenchPopup(page, bench.description);
+      await expect(page.getByText(bench.description ?? "")).toBeVisible();
+    }
   });
 
-  // Wait for benches to load and render.
-  await page.waitForTimeout(800);
+  test("can pan the map to find an offscreen bench marker", async ({ page }) => {
+    const farBench = benches.find((b) => b.description === "it-seed-far");
+    if (!farBench) throw new Error("Missing far bench seed.");
+    if (!farBench.description) throw new Error("Missing far bench description.");
 
-  for (const bench of nearBenches) {
-    if (!bench.description) {
-      throw new Error("Seeded bench is missing description.");
+    await page.goto("/");
+
+    await page.waitForFunction(() => {
+      return Boolean((window as any).__BENCHRADAR_MAP__);
+    });
+
+    await page.evaluate(() => {
+      const map = (window as any).__BENCHRADAR_MAP__;
+      if (!map) return;
+      map.setView({ lat: 52.2297, lng: 21.0122 }, 16, { animate: false });
+    });
+
+    // Move to a location that should include the far bench.
+    const moved = await page.evaluate((b) => {
+      const map = (window as any).__BENCHRADAR_MAP__;
+      if (!map) return false;
+      map.setView({ lat: b.latitude, lng: b.longitude }, 16, { animate: false });
+      const center = map.getCenter();
+      return Math.abs(center.lat - b.latitude) < 0.0005 && Math.abs(center.lng - b.longitude) < 0.0005;
+    }, farBench);
+
+    if (!moved) {
+      throw new Error("Map did not move to far bench location.");
     }
 
-    await waitForBenchMarker(page, bench.description);
-    await openBenchPopup(page, bench.description);
-
-    await expect(page.getByText(bench.description ?? "")).toBeVisible();
-  }
-});
-
-test("can pan the map to find an offscreen bench marker", async ({ page }) => {
-  const { benches } = await resetAndSeedBenches();
-  const farBench = benches.find((b) => b.description === "it-seed-far");
-  if (!farBench) throw new Error("Missing far bench seed.");
-  if (!farBench.description) throw new Error("Missing far bench description.");
-
-  await page.goto("/");
-
-  await page.waitForFunction(() => {
-    return Boolean((window as any).__BENCHRADAR_MAP__);
+    await waitForBenchMarker(page, farBench.description);
+    await openBenchPopup(page, farBench.description);
+    await expect(page.getByText(farBench.description ?? "")).toBeVisible();
   });
-
-  await page.evaluate(() => {
-    const map = (window as any).__BENCHRADAR_MAP__;
-    if (!map) return;
-    map.setView({ lat: 52.2297, lng: 21.0122 }, 16, { animate: false });
-  });
-
-  // Pan to a location that should include the far bench, then wait for it to be fetched+rendered.
-  await page.evaluate((b) => {
-    const map = (window as any).__BENCHRADAR_MAP__;
-    if (!map) return;
-    map.panTo({ lat: b.latitude, lng: b.longitude }, { animate: false });
-  }, farBench);
-
-  await waitForBenchMarker(page, farBench.description);
-  await openBenchPopup(page, farBench.description);
-  await expect(page.getByText(farBench.description ?? "")).toBeVisible();
 });
