@@ -834,7 +834,8 @@ export function MapPage() {
       .from("benches")
       .select(
         "id, latitude, longitude, title, description, main_photo_url, status, created_by"
-      );
+      )
+      .neq("status", "rejected");
 
     if (benchesError || !benchesData) {
       return;
@@ -894,7 +895,7 @@ export function MapPage() {
       };
     });
 
-    setBenches(mappedBenches);
+    setBenches(mappedBenches.filter((bench) => bench.status !== "rejected"));
   };
 
   useEffect(() => {
