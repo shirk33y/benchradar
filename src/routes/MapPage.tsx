@@ -37,12 +37,19 @@ const approvedIcon = divIcon({
   iconSize: [14, 14],
 });
 
-function createBenchPhotoIcon(url: string) {
+function markerRingClass(status: Bench["status"]) {
+  if (status === "pending") return "ring-amber-400";
+  if (status === "rejected") return "ring-rose-500";
+  return "ring-slate-900";
+}
+
+function createBenchPhotoIcon(url: string, status: Bench["status"]) {
+  const ringClass = markerRingClass(status);
   const thumbUrl = toThumbnailUrl(url);
   return divIcon({
     className: "bench-photo-marker",
     html: `
-      <div class="flex h-10 w-10 items-center justify-center rounded-[12px] border-2 border-white bg-slate-200 shadow-[0_0_0_2px_rgba(15,23,42,0.9)] overflow-hidden">
+      <div class="flex h-10 w-10 items-center justify-center rounded-[12px] border-2 border-white bg-white overflow-hidden ring-2 ${ringClass}">
         <img
           src="${thumbUrl}"
           onerror="this.onerror=null;this.src='${url}'"
@@ -1065,7 +1072,7 @@ export function MapPage() {
             position={[bench.latitude, bench.longitude]}
             icon={
               bench.mainPhotoUrl
-                ? createBenchPhotoIcon(bench.mainPhotoUrl)
+                ? createBenchPhotoIcon(bench.mainPhotoUrl, bench.status)
                 : bench.status === "pending"
                 ? pendingIcon
                 : bench.status === "rejected"
