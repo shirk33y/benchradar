@@ -35,31 +35,52 @@ async function waitForBenchMarker(page: any, title: string) {
 
 async function openBenchPopup(page: any, title: string) {
   await page.evaluate((t) => {
-    const map = (window as any).__BENCHRADAR_MAP__;
-    if (!map) throw new Error("Missing __BENCHRADAR_MAP__");
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const map = (window as any).__BENCHRADAR_MAP__;
+        if (!map) throw new Error("Missing __BENCHRADAR_MAP__");
 
-    const layers = Object.values((map as any)._layers ?? {});
-    const cluster = layers.find((layer: any) => typeof layer?.zoomToShowLayer === "function");
-    if (!cluster || typeof cluster.getLayers !== "function") {
-      throw new Error("Marker cluster group not found.");
-    }
+        const layers = Object.values((map as any)._layers ?? {});
+        const cluster = layers.find(
+          (layer: any) => typeof layer?.zoomToShowLayer === "function",
+        );
+        if (!cluster || typeof cluster.getLayers !== "function") {
+          throw new Error("Marker cluster group not found.");
+        }
 
-    const markers = cluster.getLayers();
-    const marker = markers.find(
-      (m: any) =>
-        m &&
-        m.options &&
-        m.options.title === t &&
-        typeof m.openPopup === "function" &&
-        typeof m.getLatLng === "function",
-    );
-    if (!marker) throw new Error(`Marker not found for title: ${t}`);
+        const markers = cluster.getLayers();
+        const marker = markers.find(
+          (m: any) =>
+            m &&
+            m.options &&
+            m.options.title === t &&
+            typeof m.openPopup === "function" &&
+            typeof m.getLatLng === "function",
+        );
+        if (!marker) throw new Error(`Marker not found for title: ${t}`);
 
-    map.panTo(marker.getLatLng(), { animate: false });
-    cluster.zoomToShowLayer(marker, () => {
-      marker.openPopup();
+        map.panTo(marker.getLatLng(), { animate: false });
+        cluster.zoomToShowLayer(marker, () => {
+          try {
+            marker.openPopup();
+            resolve();
+          } catch (e: any) {
+            reject(e);
+          }
+        });
+      } catch (e: any) {
+        reject(e);
+      }
     });
   }, title);
+
+  await page.waitForFunction(
+    (t) => {
+      const popups = document.querySelectorAll(".leaflet-popup");
+      return Array.from(popups).some((p) => (p.textContent ?? "").includes(t));
+    },
+    title,
+  );
 }
 
 async function resetAndSeedBenches(): Promise<{ benches: BenchInsert[] }> {
