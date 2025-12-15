@@ -1,10 +1,12 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, fireEvent, within, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, within, cleanup } from "@testing-library/react";
 
 import { MapPage } from "./MapPage";
 import { useBenchStore } from "../store/useBenchStore";
-import { useMapUiStore } from "../store/useMapUiStore";
+import { useMapStore } from "../store/useMapStore";
+
+const startEditingBenchMock = vi.fn();
 
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
@@ -22,19 +24,19 @@ vi.mock("../components/map/AuthModal", () => ({
   AuthModal: () => null,
 }));
 
-vi.mock("../components/map/AddBenchUi", () => ({
-  AddBenchUi: ({ mode, canDelete, onDeleteBench }: any) => {
-    return (
-      <div data-testid="add-bench-ui">
-        <div data-testid="add-bench-mode">{mode}</div>
-        {canDelete && onDeleteBench ? (
-          <button type="button" onClick={onDeleteBench}>
-            Delete bench
-          </button>
-        ) : null}
-      </div>
-    );
-  },
+vi.mock("../components/map/AddBenchMenu", () => ({
+  AddBenchMenu: () => <div data-testid="add-bench-ui" />,
+}));
+
+vi.mock("../hooks/useBenchEditorController", () => ({
+  useBenchEditorController: () => ({
+    startEditingBench: startEditingBenchMock,
+    handlePopupGalleryWheel: (event: any) => {
+      if (event?.deltaX && event.currentTarget?.scrollBy) {
+        event.currentTarget.scrollBy({ left: event.deltaX, behavior: "auto" });
+      }
+    },
+  }),
 }));
 
 vi.mock("leaflet", () => ({
@@ -138,30 +140,42 @@ vi.mock("../lib/supabaseClient", () => ({
   },
 }));
 
-vi.mock("../repositories/fetchBenchesWithPhotos", () => ({
-  fetchBenchesWithPhotos: vi.fn(async () => [
-    {
-      id: "b1",
-      latitude: 1,
-      longitude: 2,
-      description: "Bench 1",
-      status: "approved",
-      createdBy: "u1",
-      photoUrls: [
-        "https://example.com/p1.jpg",
-        "https://example.com/p2.jpg",
-        "https://example.com/p3.jpg",
-        "https://example.com/p4.jpg",
-        "https://example.com/p5.jpg",
-      ],
-      mainPhotoUrl: "https://example.com/p1.jpg",
-    },
-  ]),
-}));
+vi.mock("../repositories/benchRepository", async (importOriginal) => {
+  const actual = (await importOriginal()) as any;
+  return {
+    ...actual,
+    fetchBenchesWithPhotos: vi.fn(async () => [
+      {
+        id: "b1",
+        latitude: 1,
+        longitude: 2,
+        description: "Bench 1",
+        status: "approved",
+        createdBy: "u1",
+        photoUrls: [
+          "https://example.com/p1.jpg",
+          "https://example.com/p2.jpg",
+        ],
+        mainPhotoUrl: "https://example.com/p1.jpg",
+      },
+    ]),
+    deleteBench: vi.fn(async () => ({ error: null })),
+    canEditBench: vi.fn(() => true),
+  };
+});
 
 function resetStores() {
   useBenchStore.setState({ benches: [], selectedBenchId: null });
-  useMapUiStore.setState({
+  useMapStore.setState({
+    initAuth: () => () => {},
+    user: { id: "u1", email: "u1@example.com" } as any,
+    isAdmin: false,
+    openSignIn: vi.fn(),
+    center: [52.2297, 21.0122] as any,
+    setCenter: vi.fn(),
+    userLocation: null,
+    setUserLocation: vi.fn(),
+    setMap: vi.fn(),
     isMenuOpen: false,
     isAddOpen: false,
     addMode: "idle",
@@ -173,6 +187,7 @@ beforeEach(() => {
   resetStores();
   vi.spyOn(window, "confirm").mockImplementation(() => true);
   vi.spyOn(window, "alert").mockImplementation(() => {});
+  startEditingBenchMock.mockReset();
 });
 
 afterEach(() => {
@@ -200,7 +215,7 @@ describe("MapPage (unit)", () => {
     const popupGallery = popup.querySelector(".popup-gallery") as HTMLElement;
     expect(popupGallery).toBeTruthy();
 
-    // JSDOM doesn't implement scrollBy; MapPage checks for it.
+    // JSDOM doesn't implement scrollBy; controller checks for it.
     (popupGallery as any).scrollBy = vi.fn();
 
     fireEvent.wheel(popupGallery, { deltaX: 120, deltaY: 0 });
@@ -218,20 +233,20 @@ describe("MapPage (unit)", () => {
     fireEvent.click(thumbs[0]);
 
     expect(await screen.findByAltText("Bench preview")).toBeInTheDocument();
-    expect(screen.getByText("1/5")).toBeInTheDocument();
+    expect(screen.getByText("1/2")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "ArrowRight" });
-    expect(await screen.findByText("2/5")).toBeInTheDocument();
+    expect(await screen.findByText("2/2")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "ArrowLeft" });
-    expect(await screen.findByText("1/5")).toBeInTheDocument();
+    expect(await screen.findByText("1/2")).toBeInTheDocument();
 
     // Close with Escape
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByAltText("Bench preview")).not.toBeInTheDocument();
   });
 
-  it("deletes a bench via Edit -> Delete bench", async () => {
+  it("Edit button calls startEditingBench", async () => {
     render(<MapPage />);
 
     fireEvent.click(await screen.findByTestId("marker"));
@@ -240,16 +255,7 @@ describe("MapPage (unit)", () => {
     const editButton = within(popup).getByRole("button", { name: "Edit" });
     fireEvent.click(editButton);
 
-    // When editingBench is set, MapPage passes canDelete/onDeleteBench to AddBenchUi.
-    const deleteBtn = await screen.findByRole("button", { name: "Delete bench" });
-    fireEvent.click(deleteBtn);
-
-    const { supabase } = await import("../lib/supabaseClient");
-    expect((supabase.from as any)).toHaveBeenCalledWith("bench_photos");
-    expect((supabase.from as any)).toHaveBeenCalledWith("benches");
-
-    await waitFor(() => {
-      expect(screen.queryByTestId("marker")).not.toBeInTheDocument();
-    });
+    expect(startEditingBenchMock).toHaveBeenCalledTimes(1);
+    expect(startEditingBenchMock.mock.calls[0]?.[0]?.id).toBe("b1");
   });
 });

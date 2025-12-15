@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 
-import { supabase } from "../lib/supabaseClient";
-import { useMapUiStore } from "../store/useMapUiStore";
+import { fetchUserRole } from "../repositories/benchRepository";
+import {
+  getCurrentUser,
+  onAuthStateChange,
+  signInWithGoogle,
+  signInWithPassword,
+  signOut,
+} from "../repositories/authRepository";
+import { useMapStore } from "../store/useMapStore";
 
-export function useMapAuth() {
+export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
@@ -12,24 +19,22 @@ export function useMapAuth() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
-  const { setAuthMode, setMenuOpen } = useMapUiStore();
+  const { setAuthMode, setMenuOpen } = useMapStore();
 
   useEffect(() => {
     let cancelled = false;
 
-    supabase.auth.getUser().then(({ data }) => {
+    getCurrentUser().then((u) => {
       if (!cancelled) {
-        setUser(data.user ?? null);
+        setUser(u);
       }
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!cancelled) {
-          setUser(session?.user ?? null);
-        }
+    const { data: authListener } = onAuthStateChange(async (_event, session) => {
+      if (!cancelled) {
+        setUser(session?.user ?? null);
       }
-    );
+    });
 
     return () => {
       cancelled = true;
@@ -44,13 +49,8 @@ export function useMapAuth() {
       let admin = false;
 
       if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        admin = profile?.role === "admin";
+        const { role } = await fetchUserRole({ userId: user.id });
+        admin = role === "admin";
       }
 
       if (cancelled) return;
@@ -72,7 +72,7 @@ export function useMapAuth() {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     setIsAdmin(false);
     setUser(null);
     setMenuOpen(false);
@@ -83,7 +83,7 @@ export function useMapAuth() {
     setAuthLoading(true);
     setAuthError(null);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await signInWithPassword({
       email: authEmail,
       password: authPassword,
     });
@@ -101,11 +101,8 @@ export function useMapAuth() {
   const handleGoogleSignIn = async () => {
     setAuthError(null);
     setAuthLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}`,
-      },
+    const { error } = await signInWithGoogle({
+      redirectTo: `${window.location.origin}`,
     });
     if (error) {
       setAuthError("Google sign-in failed. Please try again.");

@@ -1,75 +1,123 @@
-import type { MutableRefObject, RefObject } from "react";
-import type { LatLngExpression } from "leaflet";
+import { useEffect, useMemo, useRef } from "react";
 
-import { useMapUiStore } from "../../store/useMapUiStore";
+import { useMapStore } from "../../store/useMapStore";
+import { useBenchEditorStore } from "../../store/useBenchEditorStore";
+import { useBenchStore } from "../../store/useBenchStore";
 import { BenchEditorForm } from "../bench/BenchEditorForm";
+import { useBenchEditorController } from "../../hooks/useBenchEditorController";
+import { formatLatLngInput, parseLatLngInput } from "../../lib/geo";
 
-export type AddBenchUiProps = {
-  isSignedIn: boolean;
-  selectFileInputRef: RefObject<HTMLInputElement | null>;
-  cameraFileInputRef: RefObject<HTMLInputElement | null>;
-  chosenLocation: LatLngExpression | null;
-  locationInput: string;
-  onLocationInputChange: (value: string) => void;
-  onLocationInputBlur: () => void;
-  onStartChoosingLocation: () => void;
-  locationInputError: string | null;
-  draftDescription: string;
-  setDraftDescription: (value: string) => void;
-  pendingFileList: File[];
-  dragFromIndexRef: MutableRefObject<number | null>;
-  handleChooseLocation: () => void;
-  handleSubmit: () => void;
-  removePhoto: (index: number) => void;
-  movePhoto: (from: number, to: number) => void;
-  openSignIn: () => void;
-  submitError: string | null;
-  isSubmitting: boolean;
-  mode?: "create" | "edit";
-  existingPhotoUrls?: string[];
-  canDelete?: boolean;
-  onDeleteBench?: () => void;
-  onRemoveExistingPhoto?: (index: number) => void;
-  onFabPress?: () => void;
-};
+export function AddBenchMenu() {
+  const {
+    addMode,
+    isAddOpen,
+    toggleAdd,
+    setAddOpen,
+    setAddMode,
+    openSignIn,
+    user,
+    isAdmin,
+    map,
+    setCenter,
+    userLocation,
+  } = useMapStore();
+  const isSignedIn = !!user;
+  const userId = user?.id ?? null;
 
-export function AddBenchUi({
-  isSignedIn,
-  selectFileInputRef,
-  cameraFileInputRef,
-  chosenLocation,
-  locationInput,
-  onLocationInputChange,
-  onLocationInputBlur,
-  onStartChoosingLocation,
-  locationInputError,
-  draftDescription,
-  setDraftDescription,
-  pendingFileList,
-  dragFromIndexRef,
-  handleChooseLocation,
-  handleSubmit,
-  removePhoto,
-  movePhoto,
-  openSignIn,
-  submitError,
-  isSubmitting,
-  mode = "create",
-  existingPhotoUrls = [],
-  canDelete = false,
-  onDeleteBench,
-  onRemoveExistingPhoto,
-  onFabPress,
-}: AddBenchUiProps) {
-  const { addMode, isAddOpen, toggleAdd, setAddOpen, setAddMode } =
-    useMapUiStore();
+  const editorState = useBenchEditorStore();
+  const benches = useBenchStore((s) => s.benches);
+  const selectFileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraFileInputRef = useRef<HTMLInputElement | null>(null);
+  const mapRef = useMemo(() => ({ current: map }), [map]);
+  const editor = useBenchEditorController({
+    user: userId ? { id: userId } : null,
+    isAdmin,
+    openSignIn,
+    mapRef,
+    setCenter,
+  });
+
+  const mode = editorState.editingBench ? "edit" : "create";
+  const canDelete =
+    mode === "edit" &&
+    !!editorState.editingBench &&
+    (isAdmin || (!!userId && editorState.editingBench.createdBy === userId));
 
   const showIdle = addMode === "idle";
   const showChoosing = addMode === "choosing-location";
   const showDetails = addMode === "details";
 
+  useEffect(() => {
+    if (addMode === "idle") {
+      editorState.actions.reset();
+    }
+  }, [addMode]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const stored = sessionStorage.getItem("admin_edit_bench");
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as { id?: string };
+      const existing = parsed?.id ? benches.find((b) => b.id === parsed.id) : null;
+      if (existing) {
+        editor.startEditingBench(existing);
+        sessionStorage.removeItem("admin_edit_bench");
+      }
+    } catch {
+      sessionStorage.removeItem("admin_edit_bench");
+    }
+  }, [benches, isAdmin]);
+
+  const handleStartChoosingLocation = () => {
+    const mapInstance = map;
+
+    if (!mapInstance) {
+      setAddMode("choosing-location");
+      return;
+    }
+
+    const parsedFromInput = parseLatLngInput(editorState.locationInput);
+    const target =
+      parsedFromInput ??
+      (editorState.chosenLocation
+        ? ([editorState.chosenLocation[0], editorState.chosenLocation[1]] as [number, number])
+        : userLocation && Array.isArray(userLocation)
+        ? ([userLocation[0], userLocation[1]] as [number, number])
+        : null);
+
+    if (target) {
+      mapInstance.closePopup();
+      mapInstance.setView({ lat: target[0], lng: target[1] }, 17, { animate: true });
+      editorState.actions.setChosenLocation([target[0], target[1]]);
+      editorState.actions.setLocationInput(formatLatLngInput(target[0], target[1]));
+      editorState.actions.setLocationInputDirty(false);
+      editorState.actions.setLocationInputError(null);
+    }
+
+    setAddMode("choosing-location");
+  };
+
   return (
     <>
+      <input
+        ref={selectFileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => editor.handleFilesSelected(e.target.files)}
+      />
+      <input
+        ref={cameraFileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        multiple
+        className="hidden"
+        onChange={(e) => editor.handleFilesSelected(e.target.files)}
+      />
+
       {showIdle && (
         <>
           <button
@@ -77,7 +125,6 @@ export function AddBenchUi({
             className="absolute bottom-8 right-6 z-[1000] inline-flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 via-cyan-300 to-emerald-300 text-slate-950 shadow-[0_18px_40px_rgba(56,189,248,0.55)] outline-none ring-2 ring-sky-300/40 transition active:scale-95"
             aria-label="Add a bench"
             onClick={() => {
-              onFabPress?.();
               toggleAdd();
             }}
           >
@@ -182,7 +229,7 @@ export function AddBenchUi({
             <button
               type="button"
               className="rounded-2xl bg-sky-500/90 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-sky-900/70 active:scale-[0.98]"
-              onClick={handleChooseLocation}
+              onClick={editor.handleChooseLocation}
             >
               Choose
             </button>
@@ -191,44 +238,64 @@ export function AddBenchUi({
       )}
 
       {showDetails && (
-        <div className="absolute inset-0 z-[1200] flex items-end justify-center bg-slate-950/40 backdrop-blur-md">
+        <div
+          className="fixed inset-x-0 bottom-0 z-[1100] flex justify-center px-3 pb-3"
+          data-testid="add-bench-ui"
+        >
           <div className="w-full max-w-md rounded-t-3xl border-t border-slate-800 bg-slate-950/95 px-4 pt-3 pb-4 shadow-[0_-18px_40px_rgba(15,23,42,0.95)]">
             <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
               <div className="mx-auto h-1.5 w-10 rounded-full bg-slate-600/80" />
             </div>
             <BenchEditorForm
               mode={mode}
-              locationInput={locationInput}
-              onLocationInputChange={onLocationInputChange}
-              onLocationInputBlur={onLocationInputBlur}
-              locationInputError={locationInputError}
-              onStartChoosingLocation={onStartChoosingLocation}
-              locationPlaceholder={
-                chosenLocation && Array.isArray(chosenLocation)
-                  ? `${(chosenLocation as [number, number])[0].toFixed(
-                      6,
-                    )},${(chosenLocation as [number, number])[1].toFixed(6)}`
-                  : "e.g. 54.647800,-2.150950"
+              heading={mode === "edit" ? "Edit bench" : "New bench"}
+              headingDetails={
+                mode === "edit" ? (
+                  <span>
+                    You can update the location, description, or add/remove photos.
+                  </span>
+                ) : (
+                  <span>Share a photo of a new bench!</span>
+                )
               }
-              existingPhotoUrls={existingPhotoUrls}
-              onRemoveExistingPhoto={onRemoveExistingPhoto}
-              pendingFileList={pendingFileList}
-              dragFromIndexRef={dragFromIndexRef}
-              onReorderPendingPhoto={movePhoto}
-              onRemovePendingPhoto={removePhoto}
-              onAddPhotoClick={() => selectFileInputRef.current?.click()}
-              description={draftDescription}
-              onDescriptionChange={setDraftDescription}
+              locationInput={editorState.locationInput}
+              onLocationInputChange={editor.handleLocationInputChange}
+              onLocationInputBlur={editor.handleLocationInputBlur}
+              locationInputError={editorState.locationInputError}
+              onStartChoosingLocation={handleStartChoosingLocation}
+              locationLabel={mode === "edit" ? "Location" : "Coordinates"}
+              locationPlaceholder="e.g. 54.647800,-2.150950"
+              existingPhotoUrls={editorState.existingPhotoUrls}
+              onRemoveExistingPhoto={mode === "edit" ? editor.handleRemoveExistingPhoto : undefined}
+              pendingFileList={editor.pendingFileList}
+              dragFromIndexRef={editor.dragFromIndexRef}
+              onReorderPendingPhoto={editor.movePhoto}
+              onRemovePendingPhoto={editor.removePhoto}
+              onAddPhotoClick={() => {
+                if (!isSignedIn) return;
+                setAddOpen(false);
+                selectFileInputRef.current?.click();
+              }}
+              description={editorState.draftDescription}
+              onDescriptionChange={editorState.actions.setDraftDescription}
               onCancel={() => setAddMode("idle")}
-              onSubmit={handleSubmit}
+              onSubmit={mode === "edit" ? editor.handleEditSubmit : editor.handleCreateSubmit}
               submitLabels={{
                 idle: mode === "edit" ? "Save" : "Continue",
                 submitting: mode === "edit" ? "Saving..." : "Submitting...",
               }}
-              canDelete={mode === "edit" && canDelete}
-              onDelete={mode === "edit" && canDelete ? onDeleteBench : undefined}
-              isSubmitting={isSubmitting}
-              submitError={submitError}
+              canDelete={canDelete}
+              onDelete={
+                mode === "edit" && editorState.editingBench
+                  ? () => {
+                      if (!editorState.editingBench) return;
+                      void editor.handleDeleteBench(editorState.editingBench);
+                    }
+                  : undefined
+              }
+              deleteLabel={mode === "edit" ? "Delete" : "Delete"}
+              isSubmitting={editorState.isSubmitting}
+              submitError={editorState.submitError}
             />
           </div>
         </div>

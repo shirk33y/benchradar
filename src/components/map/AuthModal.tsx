@@ -1,29 +1,18 @@
-import { type FormEvent } from "react";
+import { useMapStore } from "../../store/useMapStore";
 
-import { useMapUiStore } from "../../store/useMapUiStore";
-
-export type AuthModalProps = {
-  authEmail: string;
-  authPassword: string;
-  authError: string | null;
-  authLoading: boolean;
-  setAuthEmail: (value: string) => void;
-  setAuthPassword: (value: string) => void;
-  handleAuthSubmit: (e: FormEvent) => void;
-  handleGoogleSignIn: () => void;
-};
-
-export function AuthModal({
-  authEmail,
-  authPassword,
-  authError,
-  authLoading,
-  setAuthEmail,
-  setAuthPassword,
-  handleAuthSubmit,
-  handleGoogleSignIn,
-}: AuthModalProps) {
-  const { authMode, setAuthMode } = useMapUiStore();
+export function AuthModal() {
+  const {
+    authMode,
+    setAuthMode,
+    authEmail,
+    authPassword,
+    authError,
+    authLoading,
+    setAuthEmail,
+    setAuthPassword,
+    handleAuthSubmit,
+    handleGoogleSignIn,
+  } = useMapStore();
 
   if (authMode !== "signin") return null;
 

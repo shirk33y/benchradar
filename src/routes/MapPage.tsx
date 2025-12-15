@@ -16,19 +16,16 @@ import { useNavigate } from "react-router-dom";
 import { useBenchStore } from "../store/useBenchStore";
 import type { Bench } from "../store/useBenchStore";
 import { supabase } from "../lib/supabaseClient";
-import { fetchBenchesWithPhotos } from "../repositories/fetchBenchesWithPhotos";
-import { useMapUiStore } from "../store/useMapUiStore";
+import { useMapStore } from "../store/useMapStore";
 import { MapHeader } from "../components/map/MapHeader";
 import { HamburgerMenu } from "../components/map/HamburgerMenu";
 import { AuthModal } from "../components/map/AuthModal";
-import { AddBenchUi } from "../components/map/AddBenchUi";
-import { useMapAuth } from "../hooks/useMapAuth";
+import { AddBenchMenu } from "../components/map/AddBenchMenu";
 import { useFullImagePreview } from "../hooks/useFullImagePreview";
 import { FullImagePreview } from "../components/map/FullImagePreview";
-import { canEditBench, createBenchRepository } from "../repositories/benchRepository";
-import { convertToWebp, toThumbnailUrl } from "../lib/imageProcessing";
-import { extractGpsFromFiles } from "../lib/photoMetadata";
-import { LAT_LNG_HINT, parseLatLngInput, formatLatLngInput } from "../lib/geo";
+import { BenchPopup } from "../components/map/BenchPopup";
+import { fetchBenchesWithPhotos } from "../repositories/benchRepository";
+import { toThumbnailUrl } from "../lib/imageProcessing";
 
 const DEFAULT_CENTER: LatLngExpression = [52.2297, 21.0122]; // Warsaw as a neutral default
 
@@ -92,18 +89,19 @@ const userIcon = divIcon({
   iconAnchor: [7, 7],
 });
 
-const CHOOSE_MODE_ZOOM = 16;
 const RECENTER_ZOOM = 16;
 
 function useMapBridge(mapRef: React.MutableRefObject<LeafletMap | null>) {
   const mapInstance = useMap();
+  const setMap = useMapStore((s) => s.setMap);
 
   useEffect(() => {
     mapRef.current = mapInstance;
     window.__BENCHRADAR_MAP__ = mapInstance;
+    setMap(mapInstance);
 
     return;
-  }, [mapInstance, mapRef]);
+  }, [mapInstance, mapRef, setMap]);
 }
 
 function MapBridge({
@@ -117,60 +115,27 @@ function MapBridge({
 }
 
 export function MapPage() {
-  const [center, setCenter] = useState(DEFAULT_CENTER as LatLngExpression);
   const {
+    initAuth,
     user,
     isAdmin,
-    authEmail,
-    authPassword,
-    authError,
-    authLoading,
-    setAuthEmail,
-    setAuthPassword,
     openSignIn,
-    handleSignOut,
-    handleAuthSubmit,
-    handleGoogleSignIn,
-  } = useMapAuth();
-  const [userLocation, setUserLocation] = useState<LatLngExpression | null>(
-    null
-  );
-  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
-  const [chosenLocation, setChosenLocation] = useState<LatLngExpression | null>(
-    null
-  );
-  const [locationInput, setLocationInput] = useState("");
-  const [locationInputError, setLocationInputError] = useState<string | null>(
-    null
-  );
-  const [locationInputDirty, setLocationInputDirty] = useState(false);
-  const [draftDescription, setDraftDescription] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [editingBench, setEditingBench] = useState<Bench | null>(null);
-  const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
-  const [removedExistingPhotoUrls, setRemovedExistingPhotoUrls] = useState<
-    string[]
-  >([]);
+    center,
+    setCenter,
+    userLocation,
+    setUserLocation,
+  } = useMapStore();
+
   const [mapStyle, setMapStyle] = useState<"normal" | "satellite">("normal");
   const mapRef = useRef<LeafletMap | null>(null);
   const benchIconCacheRef = useRef(new Map<string, ReturnType<typeof divIcon>>());
-  const selectFileInputRef = useRef<HTMLInputElement | null>(null);
-  const cameraFileInputRef = useRef<HTMLInputElement | null>(null);
-  const dragFromIndexRef = useRef<number | null>(null);
   const { benches, setBenches } = useBenchStore();
   const navigate = useNavigate();
 
-  const {
-    addMode,
-    setAddMode,
-  } = useMapUiStore();
-
-  const isSignedIn = !!user;
-  const userEmail = user?.email ?? null;
-  const pendingFileList = pendingFiles ?? [];
-
-  const benchRepository = createBenchRepository(supabase as any);
+  useEffect(() => {
+    const cleanup = initAuth();
+    return () => cleanup?.();
+  }, [initAuth]);
 
   const {
     previewState,
@@ -184,478 +149,6 @@ export function MapPage() {
     handlePointerUp: handlePreviewPointerUp,
     handlePointerCancel: handlePreviewPointerCancel,
   } = useFullImagePreview();
-
-  const handleFilesSelected = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const incoming = Array.from(files);
-    setPendingFiles((prev) => [...(prev ?? []), ...incoming]);
-
-    if (incoming.length > 0) {
-      const gpsLocation = await extractGpsFromFiles(incoming);
-      if (gpsLocation) {
-        let applied = false;
-        setChosenLocation((current) => {
-          if (current) {
-            return current;
-          }
-          applied = true;
-          return gpsLocation;
-        });
-
-        if (applied) {
-          const locationExpression: LatLngExpression = [
-            gpsLocation[0],
-            gpsLocation[1],
-          ];
-          setCenter(locationExpression);
-          if (mapRef.current) {
-            mapRef.current.setView({
-              lat: gpsLocation[0],
-              lng: gpsLocation[1],
-            });
-          }
-          setLocationInput(formatLatLngInput(gpsLocation[0], gpsLocation[1]));
-          setLocationInputDirty(false);
-          setLocationInputError(null);
-        }
-      }
-    }
-
-    setAddMode("details");
-  };
-
-  const validateLocationInputValue = (value: string): string | null => {
-    if (!value.trim()) {
-      return LAT_LNG_HINT;
-    }
-    return parseLatLngInput(value) ? null : "Coordinates must be valid lat,lng values";
-  };
-
-  const handleLocationInputChange = (value: string) => {
-    if (!locationInputDirty) {
-      setLocationInputDirty(true);
-    }
-    setLocationInput(value);
-    setLocationInputError(validateLocationInputValue(value));
-  };
-
-  const handleLocationInputBlur = () => {
-    if (!locationInputDirty) {
-      setLocationInputDirty(true);
-    }
-
-    const error = validateLocationInputValue(locationInput);
-    setLocationInputError(error);
-    if (error) {
-      return;
-    }
-
-    const parsed = parseLatLngInput(locationInput);
-    if (!parsed) return;
-
-    const [lat, lng] = parsed;
-    const location: LatLngExpression = [lat, lng];
-    setChosenLocation(location);
-    setCenter(location);
-    setLocationInput(formatLatLngInput(lat, lng));
-    if (mapRef.current) {
-      mapRef.current.setView({ lat, lng });
-    }
-    setLocationInputError(null);
-  };
-
-  const handleEditSubmit = async () => {
-    if (!editingBench) return;
-
-    if (!user) {
-      openSignIn();
-      return;
-    }
-
-    const baseLatLng: [number, number] = [
-      editingBench.latitude,
-      editingBench.longitude,
-    ];
-
-    const [lat, lng] =
-      chosenLocation && Array.isArray(chosenLocation)
-        ? (chosenLocation as [number, number])
-        : baseLatLng;
-
-    const remainingExistingUrls = existingPhotoUrls;
-    const hasExisting = remainingExistingUrls.length > 0;
-    const hasNew = pendingFiles && pendingFiles.length > 0;
-
-    if (!hasExisting && !hasNew) {
-      setSubmitError("Add at least one photo.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      const uploadedUrls: string[] = [];
-      let mainPhotoUrl = remainingExistingUrls[0] ?? editingBench.mainPhotoUrl ?? null;
-
-      if (pendingFiles && pendingFiles.length > 0) {
-        for (const file of pendingFiles) {
-          const largeWebp = await convertToWebp(file, 900);
-          const thumbWebp = await convertToWebp(file, 48);
-
-          const id = crypto.randomUUID();
-          const largePath = `${user.id}/${id}.webp`;
-          const thumbPath = `${user.id}/${id}_thumb.webp`;
-
-          const { error: uploadError } = await supabase.storage
-            .from("bench_photos")
-            .upload(largePath, largeWebp, {
-              contentType: "image/webp",
-              upsert: false,
-            });
-
-          if (uploadError) {
-            setSubmitError("Uploading photos failed. Please try again.");
-            return;
-          }
-
-          await supabase.storage
-            .from("bench_photos")
-            .upload(thumbPath, thumbWebp, {
-              contentType: "image/webp",
-              upsert: false,
-            });
-
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from("bench_photos").getPublicUrl(largePath);
-
-          uploadedUrls.push(publicUrl);
-        }
-      }
-
-      if (uploadedUrls.length > 0 && !mainPhotoUrl) {
-        mainPhotoUrl = uploadedUrls[0];
-      }
-
-      const updates: Record<string, unknown> = {
-        latitude: lat,
-        longitude: lng,
-        description: draftDescription || null,
-      };
-
-      if (mainPhotoUrl !== editingBench.mainPhotoUrl) {
-        updates.main_photo_url = mainPhotoUrl;
-      }
-
-      const { error: benchError } = await supabase
-        .from("benches")
-        .update(updates)
-        .eq("id", editingBench.id);
-
-      if (benchError) {
-        setSubmitError("Saving bench failed. Please try again.");
-        return;
-      }
-
-      if (removedExistingPhotoUrls.length > 0) {
-        await supabase
-          .from("bench_photos")
-          .delete()
-          .eq("bench_id", editingBench.id)
-          .in("url", removedExistingPhotoUrls);
-      }
-
-      if (uploadedUrls.length > 0) {
-        const photoRows = uploadedUrls.map((url) => ({
-          bench_id: editingBench.id,
-          url,
-          is_main: mainPhotoUrl === url,
-        }));
-
-        await supabase.from("bench_photos").insert(photoRows);
-      }
-
-      const updatedPhotoUrls = [...remainingExistingUrls, ...uploadedUrls];
-
-      setBenches(
-        benches.map((b: Bench) =>
-          b.id === editingBench.id
-            ? {
-                ...b,
-                latitude: lat,
-                longitude: lng,
-                description: draftDescription || null,
-                mainPhotoUrl,
-                photoUrls: updatedPhotoUrls,
-              }
-            : b
-        )
-      );
-
-      setAddMode("idle");
-      setEditingBench(null);
-      setPendingFiles(null);
-      setDraftDescription("");
-      setChosenLocation(null);
-      setExistingPhotoUrls([]);
-      setRemovedExistingPhotoUrls([]);
-      setLocationInput("");
-      setLocationInputDirty(false);
-      setLocationInputError(null);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDeleteBench = async (bench: Bench) => {
-    if (!canEditBench({ userId: user?.id ?? null, isAdmin, bench })) {
-      if (!user) {
-        openSignIn();
-      }
-      return;
-    }
-
-    const confirmDelete = window.confirm(
-      "Delete this bench? This cannot be undone."
-    );
-    if (!confirmDelete) return;
-
-    const { error } = await benchRepository.deleteBench({ benchId: bench.id });
-    if (error) {
-      window.alert(error);
-      return;
-    }
-
-    setBenches(benches.filter((b: Bench) => b.id !== bench.id));
-    setAddMode("idle");
-    setEditingBench(null);
-    setPendingFiles(null);
-    setDraftDescription("");
-    setChosenLocation(null);
-    setLocationInput("");
-    setSubmitError(null);
-    setExistingPhotoUrls([]);
-    setRemovedExistingPhotoUrls([]);
-  };
-
-  const startEditingBench = (bench: Bench) => {
-    if (!user) {
-      openSignIn();
-      return;
-    }
-
-    if (!isAdmin && bench.createdBy && bench.createdBy !== user.id) {
-      return;
-    }
-
-    setEditingBench(bench);
-    setDraftDescription(bench.description ?? "");
-    setChosenLocation([bench.latitude, bench.longitude]);
-    setLocationInput(formatLatLngInput(bench.latitude, bench.longitude));
-    setLocationInputDirty(false);
-    setLocationInputError(null);
-    setPendingFiles(null);
-    setSubmitError(null);
-    setExistingPhotoUrls(
-      bench.photoUrls && bench.photoUrls.length > 0
-        ? bench.photoUrls
-        : bench.mainPhotoUrl
-        ? [bench.mainPhotoUrl]
-        : []
-    );
-    setRemovedExistingPhotoUrls([]);
-    setAddMode("details");
-  };
-
-  const handleChooseLocation = () => {
-    if (!mapRef.current) {
-      setAddMode("idle");
-      return;
-    }
-    const c = mapRef.current.getCenter();
-    const location: LatLngExpression = [c.lat, c.lng];
-    setChosenLocation(location);
-    setLocationInput(formatLatLngInput(location[0], location[1]));
-    setLocationInputDirty(false);
-    setLocationInputError(null);
-    setAddMode("details");
-  };
-
-  const movePhoto = (fromIndex: number, toIndex: number) => {
-    setPendingFiles((current) => {
-      if (!current) return current;
-      if (toIndex < 0 || toIndex >= current.length) return current;
-      const next = [...current];
-      const [item] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, item);
-      return next;
-    });
-  };
-
-  const handleCreateSubmit = async () => {
-    if (!pendingFiles || pendingFiles.length === 0) {
-      setSubmitError("Add at least one photo.");
-      return;
-    }
-
-    if (!chosenLocation || !Array.isArray(chosenLocation)) {
-      setSubmitError("Choose a location on the map.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setSubmitError("You need to be signed in to add a bench.");
-        return;
-      }
-
-      const [lat, lng] = chosenLocation as [number, number];
-      const uploadedUrls: string[] = [];
-
-      for (const file of pendingFiles) {
-        const largeWebp = await convertToWebp(file, 900);
-        const thumbWebp = await convertToWebp(file, 48);
-
-        const id = crypto.randomUUID();
-        const largePath = `${user.id}/${id}.webp`;
-        const thumbPath = `${user.id}/${id}_thumb.webp`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("bench_photos")
-          .upload(largePath, largeWebp, {
-            contentType: "image/webp",
-            upsert: false,
-          });
-
-        if (uploadError) {
-          setSubmitError("Uploading photos failed. Please try again.");
-          return;
-        }
-
-        await supabase.storage
-          .from("bench_photos")
-          .upload(thumbPath, thumbWebp, {
-            contentType: "image/webp",
-            upsert: false,
-          });
-
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("bench_photos").getPublicUrl(largePath);
-
-        uploadedUrls.push(publicUrl);
-      }
-
-      const mainPhotoUrl = uploadedUrls[0] ?? null;
-
-      const { data: benchRow, error: benchError } = await supabase
-        .from("benches")
-        .insert({
-          created_by: user.id,
-          status: "pending",
-          latitude: lat,
-          longitude: lng,
-          description: draftDescription || null,
-          main_photo_url: mainPhotoUrl,
-        })
-        .select("id")
-        .single();
-
-      if (benchError || !benchRow) {
-        setSubmitError("Saving bench failed. Please try again.");
-        return;
-      }
-
-      if (uploadedUrls.length > 0) {
-        const photoRows = uploadedUrls.map((url, index) => ({
-          bench_id: benchRow.id,
-          url,
-          is_main: index === 0,
-        }));
-
-        await supabase.from("bench_photos").insert(photoRows);
-      }
-
-      const newBench: Bench = {
-        id: benchRow.id,
-        latitude: lat,
-        longitude: lng,
-        title: null,
-        description: draftDescription || null,
-        mainPhotoUrl,
-        createdBy: user.id,
-        status: "pending" as const,
-      };
-
-      setBenches([...benches, newBench]);
-
-      setAddMode("idle");
-      setPendingFiles(null);
-      setDraftDescription("");
-      setChosenLocation(null);
-      setLocationInput("");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const removePhoto = (index: number) => {
-    setPendingFiles((current) => {
-      if (!current) return current;
-      const next = current.filter((_, i) => i !== index);
-      return next.length > 0 ? next : null;
-    });
-  };
-
-  const handleRemoveExistingPhoto = (index: number) => {
-    setExistingPhotoUrls((current) => {
-      if (index < 0 || index >= current.length) {
-        return current;
-      }
-      const removedUrl = current[index];
-      if (removedUrl) {
-        setRemovedExistingPhotoUrls((prev) =>
-          prev.includes(removedUrl) ? prev : [...prev, removedUrl]
-        );
-      }
-      const next = current.filter((_, i) => i !== index);
-      return next;
-    });
-  };
-
-  const handlePopupGalleryWheel = (
-    event: ReactWheelEvent<HTMLDivElement>
-  ) => {
-    const container = event.currentTarget;
-    if (!container) return;
-    const dominantDelta =
-      Math.abs(event.deltaX) > Math.abs(event.deltaY)
-        ? event.deltaX
-        : event.deltaY;
-
-    if (dominantDelta === 0) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    if (typeof container.scrollBy === "function") {
-      container.scrollBy({
-        left: dominantDelta,
-        behavior: "smooth",
-      });
-    } else {
-      container.scrollLeft += dominantDelta;
-    }
-  };
 
   const closeAnyPopup = () => {
     if (mapRef.current) {
@@ -676,7 +169,7 @@ export function MapPage() {
   };
 
   const fetchBenchesForCurrentBounds = async (_mapOverride?: LeafletMap) => {
-    const mappedBenches = await fetchBenchesWithPhotos(supabase);
+    const mappedBenches = await fetchBenchesWithPhotos();
     setBenches(mappedBenches);
   };
 
@@ -727,19 +220,6 @@ export function MapPage() {
   }, []);
 
   useEffect(() => {
-    if (addMode === "idle") {
-      setEditingBench(null);
-      setPendingFiles(null);
-      setDraftDescription("");
-      setChosenLocation(null);
-      setLocationInput("");
-      setSubmitError(null);
-      setExistingPhotoUrls([]);
-      setRemovedExistingPhotoUrls([]);
-    }
-  }, [addMode]);
-
-  useEffect(() => {
     (async () => {
       await fetchBenchesForCurrentBounds();
     })();
@@ -749,53 +229,7 @@ export function MapPage() {
     };
   }, [setBenches]);
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    const stored = sessionStorage.getItem("admin_edit_bench");
-    if (!stored) return;
-    try {
-      const parsed: Bench = JSON.parse(stored);
-      const existing = benches.find((b) => b.id === parsed.id);
-      if (existing) {
-        startEditingBench(existing);
-        sessionStorage.removeItem("admin_edit_bench");
-      }
-    } catch {
-      sessionStorage.removeItem("admin_edit_bench");
-    }
-  }, [benches, isAdmin]);
-
   const mapCenter = center;
-
-  const handleStartChoosingLocation = () => {
-    const map = mapRef.current;
-    if (!map) {
-      setAddMode("choosing-location");
-      return;
-    }
-
-    const parsedFromInput = parseLatLngInput(locationInput);
-    const target =
-      parsedFromInput ??
-      (chosenLocation && Array.isArray(chosenLocation)
-        ? ([chosenLocation[0], chosenLocation[1]] as [number, number])
-        : userLocation && Array.isArray(userLocation)
-        ? ([userLocation[0], userLocation[1]] as [number, number])
-        : null);
-
-    if (target) {
-      map.closePopup();
-      map.setView({ lat: target[0], lng: target[1] }, CHOOSE_MODE_ZOOM, {
-        animate: true,
-      });
-      setChosenLocation([target[0], target[1]]);
-      setLocationInput(formatLatLngInput(target[0], target[1]));
-      setLocationInputDirty(false);
-      setLocationInputError(null);
-    }
-
-    setAddMode("choosing-location");
-  };
 
   return (
     <div className="relative h-dvh w-dvw overflow-hidden bg-slate-950">
@@ -869,49 +303,14 @@ export function MapPage() {
                   closeButton={false}
                   autoPan={!(import.meta as any).env?.VITE_E2E}
                 >
-                  <div className="flex max-w-[220px] flex-col gap-2">
-                    {bench.description && (
-                      <div className="text-xs text-slate-800">
-                        {bench.description}
-                      </div>
-                    )}
-                    {popupPhotos.length > 0 && (
-                      <div
-                        className="popup-gallery flex gap-2 overflow-x-auto pb-1"
-                        onWheel={handlePopupGalleryWheel}
-                      >
-                        {popupPhotos.map((url, _index) => (
-                          <button
-                            key={`${url}-${_index}`}
-                            type="button"
-                            className="relative flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/70 bg-white/40 shadow"
-                            onClick={() => openPhotoPreview(popupPhotos, _index)}
-                          >
-                            <img
-                              src={url}
-                              loading="lazy"
-                              alt={bench.description ?? "Bench photo"}
-                              className="h-full w-full object-cover"
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {(isAdmin || (user && bench.createdBy === user.id)) && (
-                      <button
-                        type="button"
-                        className="mt-1 inline-flex self-start rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-slate-50"
-                        onClick={() => startEditingBench(bench)}
-                      >
-                        Edit
-                      </button>
-                    )}
-                    {isAdmin && bench.status === "pending" && (
-                      <div className="mt-1 inline-flex self-start rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                        Pending
-                      </div>
-                    )}
-                  </div>
+                  <BenchPopup
+                    bench={bench}
+                    popupPhotos={popupPhotos}
+                    isAdmin={isAdmin}
+                    userId={user?.id ?? null}
+                    openSignIn={openSignIn}
+                    onOpenPhotoPreview={openPhotoPreview}
+                  />
                 </Popup>
               </Marker>
             );
@@ -983,83 +382,12 @@ export function MapPage() {
       {/* Top iOS-like title bar */}
       <MapHeader />
 
-      {/* Hidden file inputs for photo selection */}
-      <input
-        ref={selectFileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={(e) => handleFilesSelected(e.target.files)}
-      />
-      <input
-        ref={cameraFileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        multiple
-        className="hidden"
-        onChange={(e) => handleFilesSelected(e.target.files)}
-      />
-
-      <AddBenchUi
-        isSignedIn={isSignedIn}
-        selectFileInputRef={selectFileInputRef}
-        cameraFileInputRef={cameraFileInputRef}
-        chosenLocation={chosenLocation}
-        locationInput={locationInput}
-        onLocationInputChange={handleLocationInputChange}
-        onLocationInputBlur={handleLocationInputBlur}
-        onStartChoosingLocation={handleStartChoosingLocation}
-        locationInputError={locationInputError}
-        draftDescription={draftDescription}
-        setDraftDescription={setDraftDescription}
-        pendingFileList={pendingFileList}
-        dragFromIndexRef={dragFromIndexRef}
-        handleChooseLocation={handleChooseLocation}
-        handleSubmit={editingBench ? handleEditSubmit : handleCreateSubmit}
-        removePhoto={removePhoto}
-        movePhoto={movePhoto}
-        openSignIn={openSignIn}
-        mode={editingBench ? "edit" : "create"}
-        onFabPress={closeAnyPopup}
-        existingPhotoUrls={existingPhotoUrls}
-        canDelete={
-          !!editingBench &&
-          (isAdmin || (!!user && editingBench.createdBy === user.id))
-        }
-        onDeleteBench={
-          editingBench
-            ? () => {
-                void handleDeleteBench(editingBench);
-              }
-            : undefined
-        }
-        onRemoveExistingPhoto={editingBench ? handleRemoveExistingPhoto : undefined}
-        submitError={submitError}
-        isSubmitting={isSubmitting}
-      />
+      <AddBenchMenu />
 
       {/* Bottom-left hamburger menu */}
-      <HamburgerMenu
-        isSignedIn={isSignedIn}
-        isAdmin={isAdmin}
-        userEmail={userEmail}
-        openSignIn={openSignIn}
-        handleSignOut={handleSignOut}
-        onGoToAdmin={() => navigate("/admin")}
-      />
+      <HamburgerMenu />
 
-      <AuthModal
-        authEmail={authEmail}
-        authPassword={authPassword}
-        authError={authError}
-        authLoading={authLoading}
-        setAuthEmail={setAuthEmail}
-        setAuthPassword={setAuthPassword}
-        handleAuthSubmit={handleAuthSubmit}
-        handleGoogleSignIn={handleGoogleSignIn}
-      />
+      <AuthModal />
     </div>
   );
 }

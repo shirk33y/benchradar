@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { User } from "@supabase/supabase-js";
 
-import { supabase } from "../lib/supabaseClient";
 import type { Bench } from "../store/useBenchStore";
-import { convertToWebp } from "../lib/imageProcessing";
-import {
-  LAT_LNG_HINT,
-  formatLatLngInput,
-  parseLatLngInput,
-} from "../lib/geo";
+import { formatLatLngInput } from "../lib/geo";
 import { BenchEditorForm } from "../components/bench/BenchEditorForm";
+import { useBenchEditorController } from "../hooks/useBenchEditorController";
+import {
+  deleteBench,
+  deleteBenchPhotosByUrls,
+  fetchUserRole,
+  updateBenchStatus,
+} from "../repositories/benchRepository";
+import { getCurrentUser } from "../repositories/authRepository";
 import {
   TAB_CONFIG,
   type BenchAdminRow,
@@ -42,9 +44,7 @@ export function AdminPage() {
     let cancelled = false;
 
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
 
       if (cancelled) return;
 
@@ -56,19 +56,15 @@ export function AdminPage() {
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
+      const { role, error: profileError } = await fetchUserRole({ userId: user.id });
 
       if (profileError) {
-        setError("Fetching profile failed.");
+        setError(profileError);
         setAuthLoading(false);
         return;
       }
 
-      const admin = profile?.role === "admin";
+      const admin = role === "admin";
 
       if (cancelled) return;
 
@@ -85,13 +81,13 @@ export function AdminPage() {
     bench: BenchAdminRow,
     status: Bench["status"]
   ) => {
-    const { error: updateError } = await supabase
-      .from("benches")
-      .update({ status })
-      .eq("id", bench.id);
+    const { error: updateError } = await updateBenchStatus({
+      benchId: bench.id,
+      status,
+    });
 
     if (updateError) {
-      window.alert("Updating status failed. Please try again.");
+      window.alert(updateError);
       return;
     }
 
@@ -105,23 +101,20 @@ export function AdminPage() {
     );
     if (!confirmDelete) return;
 
-    const { error: photosError } = await supabase
-      .from("bench_photos")
-      .delete()
-      .eq("bench_id", bench.id);
+    const { error: photosError } = await deleteBenchPhotosByUrls({
+      benchId: bench.id,
+      urls: bench.photoUrls ?? [],
+    });
 
     if (photosError) {
-      window.alert("Deleting bench photos failed. Please try again.");
+      window.alert(photosError);
       return;
     }
 
-    const { error: benchError } = await supabase
-      .from("benches")
-      .delete()
-      .eq("id", bench.id);
+    const { error: benchError } = await deleteBench({ benchId: bench.id });
 
     if (benchError) {
-      window.alert("Deleting bench failed. Please try again.");
+      window.alert(benchError);
       return;
     }
 
@@ -142,258 +135,48 @@ export function AdminPage() {
     }
   }, [routeTab, activeTab]);
 
-  const [editingBench, setEditingBench] = useState<BenchAdminRow | null>(null);
-  const [editingDescription, setEditingDescription] = useState("");
-  const [editingLocationInput, setEditingLocationInput] = useState("");
-  const [editingLocationDirty, setEditingLocationDirty] = useState(false);
-  const [editingLocationError, setEditingLocationError] = useState<
-    string | null
-  >(null);
-  const [editingPendingFiles, setEditingPendingFiles] = useState<File[]>([]);
-  const [editingExistingPhotoUrls, setEditingExistingPhotoUrls] = useState<
-    string[]
-  >([]);
-  const [editingRemovedPhotoUrls, setEditingRemovedPhotoUrls] = useState<
-    string[]
-  >([]);
-  const [editingSubmitError, setEditingSubmitError] = useState<string | null>(
-    null
-  );
-  const [editingSubmitting, setEditingSubmitting] = useState(false);
+  const editingBenchIdRef = useRef<string | null>(null);
+  const adminMapRef = useRef<any>(null);
+
+  const editor = useBenchEditorController({
+    benches: activeTabState.items as any,
+    setBenches: (next) => {
+      const editingId = editingBenchIdRef.current;
+      if (!editingId) return;
+      const updated = next.find((b) => b.id === editingId);
+      if (!updated) return;
+      updateBenchInTabs(editingId, (prev) => ({
+        ...prev,
+        latitude: updated.latitude,
+        longitude: updated.longitude,
+        description: updated.description ?? null,
+        mainPhotoUrl: updated.mainPhotoUrl ?? prev.mainPhotoUrl,
+        photoUrls: updated.photoUrls ?? prev.photoUrls,
+      }));
+    },
+    user: user ? { id: user.id, email: user.email } : null,
+    isAdmin,
+    openSignIn: () => {},
+    mapRef: adminMapRef,
+    setCenter: () => {},
+    setAddMode: () => {},
+  });
+
+  const editingBench = editor.editingBench as any as BenchAdminRow | null;
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
-  const editingDragFromIndexRef = useRef<number | null>(null);
 
   const openEditDialog = (bench: BenchAdminRow) => {
-    setEditingBench(bench);
-    setEditingDescription(bench.description ?? "");
-    setEditingLocationInput(formatLatLngInput(bench.latitude, bench.longitude));
-    setEditingLocationDirty(false);
-    setEditingLocationError(null);
-    setEditingPendingFiles([]);
-    setEditingRemovedPhotoUrls([]);
-    setEditingSubmitError(null);
-    const initialPhotos =
-      bench.photoUrls && bench.photoUrls.length > 0
-        ? bench.photoUrls
-        : bench.mainPhotoUrl
-        ? [bench.mainPhotoUrl]
-        : [];
-    setEditingExistingPhotoUrls(initialPhotos);
+    editingBenchIdRef.current = bench.id;
+    editor.startEditingBench(bench as any);
   };
 
   const closeEditDialog = () => {
-    setEditingBench(null);
-    setEditingDescription("");
-    setEditingLocationInput("");
-    setEditingLocationDirty(false);
-    setEditingLocationError(null);
-    setEditingPendingFiles([]);
-    setEditingExistingPhotoUrls([]);
-    setEditingRemovedPhotoUrls([]);
-    setEditingSubmitError(null);
-    setEditingSubmitting(false);
+    editingBenchIdRef.current = null;
+    editor.resetEditor();
   };
 
   const handleEditBench = (bench: BenchAdminRow) => {
     openEditDialog(bench);
-  };
-
-  const handleEditingFilesSelected = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const incoming = Array.from(files);
-    setEditingPendingFiles((prev) => [...prev, ...incoming]);
-  };
-
-  const handleEditingMovePhoto = (fromIndex: number, toIndex: number) => {
-    setEditingPendingFiles((current) => {
-      if (toIndex < 0 || toIndex >= current.length) return current;
-      const next = [...current];
-      const [item] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, item);
-      return next;
-    });
-  };
-
-  const removePendingEditPhoto = (index: number) => {
-    setEditingPendingFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const removeExistingEditPhoto = (index: number) => {
-    setEditingExistingPhotoUrls((prev) => {
-      const clone = [...prev];
-      const [removed] = clone.splice(index, 1);
-      if (removed) {
-        setEditingRemovedPhotoUrls((prevRemoved) => [...prevRemoved, removed]);
-      }
-      return clone;
-    });
-  };
-
-  const validateEditingLocation = (value: string): string | null => {
-    if (!value.trim()) {
-      return LAT_LNG_HINT;
-    }
-    return parseLatLngInput(value) ? null : "Coordinates must be valid lat,lng";
-  };
-
-  const handleEditingLocationChange = (value: string) => {
-    if (!editingLocationDirty) {
-      setEditingLocationDirty(true);
-    }
-    setEditingLocationInput(value);
-    setEditingLocationError(validateEditingLocation(value));
-  };
-
-  const handleEditingLocationBlur = () => {
-    if (!editingLocationDirty) {
-      setEditingLocationDirty(true);
-    }
-    const error = validateEditingLocation(editingLocationInput);
-    setEditingLocationError(error);
-    if (error) {
-      return;
-    }
-    const parsed = parseLatLngInput(editingLocationInput);
-    if (!parsed) return;
-    const [lat, lng] = parsed;
-    setEditingLocationInput(formatLatLngInput(lat, lng));
-  };
-
-  const handleEditingSubmit = async () => {
-    if (!editingBench) return;
-
-    const locationError = validateEditingLocation(editingLocationInput);
-    if (locationError) {
-      setEditingLocationError(locationError);
-      return;
-    }
-
-    const parsed = parseLatLngInput(editingLocationInput);
-    const [lat, lng] = parsed ?? [
-      editingBench.latitude,
-      editingBench.longitude,
-    ];
-
-    const remainingExisting = editingExistingPhotoUrls;
-    const hasExisting = remainingExisting.length > 0;
-    const hasNew = editingPendingFiles.length > 0;
-
-    if (!hasExisting && !hasNew) {
-      setEditingSubmitError("Add at least one photo.");
-      return;
-    }
-
-    setEditingSubmitting(true);
-    setEditingSubmitError(null);
-
-    try {
-      const uploadedUrls: string[] = [];
-      let mainPhotoUrl: string | null =
-        (editingBench.mainPhotoUrl &&
-          remainingExisting.find((url) => url === editingBench.mainPhotoUrl)) ??
-        remainingExisting[0] ??
-        null;
-
-      if (editingPendingFiles.length > 0) {
-        for (const file of editingPendingFiles) {
-          const largeWebp = await convertToWebp(file, 900);
-          const thumbWebp = await convertToWebp(file, 48);
-
-          const id = crypto.randomUUID();
-          const ownerPrefix = editingBench.createdBy || user?.id || "admin";
-          const largePath = `${ownerPrefix}/${id}.webp`;
-          const thumbPath = `${ownerPrefix}/${id}_thumb.webp`;
-
-          const { error: uploadError } = await supabase.storage
-            .from("bench_photos")
-            .upload(largePath, largeWebp, {
-              contentType: "image/webp",
-              upsert: false,
-            });
-
-          if (uploadError) {
-            setEditingSubmitError(
-              "Uploading photos failed. Please try again."
-            );
-            return;
-          }
-
-          await supabase.storage
-            .from("bench_photos")
-            .upload(thumbPath, thumbWebp, {
-              contentType: "image/webp",
-              upsert: false,
-            });
-
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from("bench_photos").getPublicUrl(largePath);
-
-          uploadedUrls.push(publicUrl);
-        }
-      }
-
-      if (!mainPhotoUrl) {
-        mainPhotoUrl =
-          editingBench.mainPhotoUrl ??
-          uploadedUrls[0] ??
-          remainingExisting[0] ??
-          null;
-      }
-
-      const updates: Record<string, unknown> = {
-        latitude: lat,
-        longitude: lng,
-        description: editingDescription || null,
-      };
-
-      if (mainPhotoUrl && mainPhotoUrl !== editingBench.mainPhotoUrl) {
-        updates.main_photo_url = mainPhotoUrl;
-      }
-
-      const { error: benchError } = await supabase
-        .from("benches")
-        .update(updates)
-        .eq("id", editingBench.id);
-
-      if (benchError) {
-        setEditingSubmitError("Saving bench failed. Please try again.");
-        return;
-      }
-
-      if (editingRemovedPhotoUrls.length > 0) {
-        await supabase
-          .from("bench_photos")
-          .delete()
-          .eq("bench_id", editingBench.id)
-          .in("url", editingRemovedPhotoUrls);
-      }
-
-      if (uploadedUrls.length > 0) {
-        const photoRows = uploadedUrls.map((url) => ({
-          bench_id: editingBench.id,
-          url,
-          is_main: mainPhotoUrl === url,
-        }));
-
-        await supabase.from("bench_photos").insert(photoRows);
-      }
-
-      const updatedPhotoUrls = [...remainingExisting, ...uploadedUrls];
-
-      updateBenchInTabs(editingBench.id, (b) => ({
-        ...b,
-        latitude: lat,
-        longitude: lng,
-        description: editingDescription || null,
-        mainPhotoUrl: mainPhotoUrl ?? b.mainPhotoUrl,
-        photoUrls: updatedPhotoUrls,
-      }));
-
-      closeEditDialog();
-    } finally {
-      setEditingSubmitting(false);
-    }
   };
 
   const handleTabChange = (tab: TabKey) => {
@@ -658,7 +441,7 @@ export function AdminPage() {
                 multiple
                 className="hidden"
                 onChange={(event) => {
-                  handleEditingFilesSelected(event.target.files);
+                  void editor.handleFilesSelected(event.target.files);
                   if (event.target) {
                     event.target.value = "";
                   }
@@ -668,32 +451,32 @@ export function AdminPage() {
               <BenchEditorForm
                 mode="edit"
                 heading="Edit bench"
-                locationInput={editingLocationInput}
-                onLocationInputChange={handleEditingLocationChange}
-                onLocationInputBlur={handleEditingLocationBlur}
-                locationInputError={editingLocationError}
+                locationInput={editor.locationInput}
+                onLocationInputChange={editor.handleLocationInputChange}
+                onLocationInputBlur={editor.handleLocationInputBlur}
+                locationInputError={editor.locationInputError}
                 locationPlaceholder={formatLatLngInput(
                   editingBench.latitude,
                   editingBench.longitude
                 )}
-                existingPhotoUrls={editingExistingPhotoUrls}
-                onRemoveExistingPhoto={removeExistingEditPhoto}
-                pendingFileList={editingPendingFiles}
-                dragFromIndexRef={editingDragFromIndexRef}
-                onReorderPendingPhoto={handleEditingMovePhoto}
-                onRemovePendingPhoto={removePendingEditPhoto}
+                existingPhotoUrls={editor.existingPhotoUrls}
+                onRemoveExistingPhoto={editor.handleRemoveExistingPhoto}
+                pendingFileList={editor.pendingFileList}
+                dragFromIndexRef={editor.dragFromIndexRef}
+                onReorderPendingPhoto={editor.movePhoto}
+                onRemovePendingPhoto={editor.removePhoto}
                 onAddPhotoClick={() => editFileInputRef.current?.click()}
-                description={editingDescription}
-                onDescriptionChange={setEditingDescription}
+                description={editor.draftDescription}
+                onDescriptionChange={editor.setDraftDescription}
                 onCancel={closeEditDialog}
-                onSubmit={handleEditingSubmit}
+                onSubmit={editor.handleEditSubmit}
                 submitLabels={{
                   idle: "Save changes",
                   submitting: "Saving...",
                 }}
                 canDelete={false}
-                isSubmitting={editingSubmitting}
-                submitError={editingSubmitError}
+                isSubmitting={editor.isSubmitting}
+                submitError={editor.submitError}
               />
             </div>
           </div>
