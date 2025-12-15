@@ -1,23 +1,19 @@
-import { useMapUiStore } from "../../store/useMapUiStore";
+import { useMapStore } from "../../store/useMapStore";
+import { useNavigate } from "react-router-dom";
 
-export type HamburgerMenuProps = {
-  isSignedIn: boolean;
-  isAdmin: boolean;
-  userEmail?: string | null;
-  openSignIn: () => void;
-  handleSignOut: () => void;
-  onGoToAdmin: () => void;
-};
-
-export function HamburgerMenu({
-  isSignedIn,
-  isAdmin,
-  userEmail,
-  openSignIn,
-  handleSignOut,
-  onGoToAdmin,
-}: HamburgerMenuProps) {
-  const { isMenuOpen, toggleMenu, setMenuOpen } = useMapUiStore();
+export function HamburgerMenu() {
+  const navigate = useNavigate();
+  const {
+    isMenuOpen,
+    toggleMenu,
+    setMenuOpen,
+    user,
+    isAdmin,
+    openSignIn,
+    handleSignOut,
+  } = useMapStore();
+  const isSignedIn = !!user;
+  const userEmail = user?.email ?? null;
 
   return (
     <>
@@ -66,7 +62,7 @@ export function HamburgerMenu({
                   className="flex items-center justify-between rounded-2xl border border-sky-500/40 bg-slate-900/90 px-3 py-2 text-[13px] font-semibold text-sky-200 shadow-inner shadow-slate-900/40 active:scale-[0.98]"
                   onClick={() => {
                     setMenuOpen(false);
-                    onGoToAdmin();
+                    navigate("/admin");
                   }}
                 >
                   <span>Admin panel</span>

@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches: [ main ]
 
@@ -28,6 +29,11 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Unit tests
+        env:
+          CI: "true"
+        run: npm run test:unit:ci
 
       - name: Build
         env:

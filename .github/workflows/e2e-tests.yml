@@ -1,0 +1,47 @@
+name: E2E Tests
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install/start Supabase
+        env:
+          CI: "true"
+          DOCKER_HIDE_LEGACY_PROGRESS: "1"
+          COMPOSE_PROGRESS: quiet
+        run: |
+          EXCLUDES="studio,edge-runtime,mailpit,realtime,imgproxy,vector,logflare"
+          npx supabase start --exclude "$EXCLUDES"
+          node scripts/export-local-supabase-env.mjs --format=github-env >> "$GITHUB_ENV"
+
+      - name: Install/start Playwright
+        run: |
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        env:
+          CI: "true"
+        run: npx playwright test

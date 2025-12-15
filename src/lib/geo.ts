@@ -35,3 +35,25 @@ export function parseLatLngInput(value: string): [number, number] | null {
 export function formatLatLngInput(lat: number, lng: number): string {
   return `${lat.toFixed(6)},${lng.toFixed(6)}`;
 }
+
+export function validateLatLngInput(value: string): string | null {
+  if (!value.trim()) {
+    return LAT_LNG_HINT;
+  }
+  return parseLatLngInput(value)
+    ? null
+    : "Coordinates must be valid lat,lng values";
+}
+
+export function parseAndFormatLatLngInput(value: string):
+  | { lat: number; lng: number; formatted: string }
+  | null {
+  const parsed = parseLatLngInput(value);
+  if (!parsed) return null;
+  const [lat, lng] = parsed;
+  return {
+    lat,
+    lng,
+    formatted: formatLatLngInput(lat, lng),
+  };
+}
