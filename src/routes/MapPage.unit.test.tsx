@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, fireEvent, within, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, within, cleanup, waitFor } from "@testing-library/react";
 
 import { MapPage } from "./MapPage";
 import { useBenchStore } from "../store/useBenchStore";
@@ -23,7 +23,18 @@ vi.mock("../components/map/AuthModal", () => ({
 }));
 
 vi.mock("../components/map/AddBenchUi", () => ({
-  AddBenchUi: () => null,
+  AddBenchUi: ({ mode, canDelete, onDeleteBench }: any) => {
+    return (
+      <div data-testid="add-bench-ui">
+        <div data-testid="add-bench-mode">{mode}</div>
+        {canDelete && onDeleteBench ? (
+          <button type="button" onClick={onDeleteBench}>
+            Delete bench
+          </button>
+        ) : null}
+      </div>
+    );
+  },
 }));
 
 vi.mock("leaflet", () => ({
@@ -91,7 +102,7 @@ vi.mock("react-leaflet", async () => {
 vi.mock("../lib/supabaseClient", () => ({
   supabase: {
     auth: {
-      getUser: vi.fn(async () => ({ data: { user: null } })),
+      getUser: vi.fn(async () => ({ data: { user: { id: "u1", email: "u1@example.com" } } })),
       onAuthStateChange: vi.fn(() => ({
         data: { subscription: { unsubscribe: vi.fn() } },
       })),
@@ -99,11 +110,31 @@ vi.mock("../lib/supabaseClient", () => ({
       signInWithOAuth: vi.fn(),
       signOut: vi.fn(),
     },
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: null })) })),
-      })),
-    })),
+    from: vi.fn((table: string) => {
+      if (table === "profiles") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: vi.fn(async () => ({ data: null })),
+            }),
+          }),
+        };
+      }
+
+      if (table === "bench_photos" || table === "benches") {
+        return {
+          delete: () => ({
+            eq: vi.fn(async () => ({ error: null })),
+          }),
+        };
+      }
+
+      return {
+        select: () => ({
+          eq: () => ({ maybeSingle: vi.fn(async () => ({ data: null })) }),
+        }),
+      };
+    }),
   },
 }));
 
@@ -140,6 +171,8 @@ function resetStores() {
 
 beforeEach(() => {
   resetStores();
+  vi.spyOn(window, "confirm").mockImplementation(() => true);
+  vi.spyOn(window, "alert").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -196,5 +229,27 @@ describe("MapPage (unit)", () => {
     // Close with Escape
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByAltText("Bench preview")).not.toBeInTheDocument();
+  });
+
+  it("deletes a bench via Edit -> Delete bench", async () => {
+    render(<MapPage />);
+
+    fireEvent.click(await screen.findByTestId("marker"));
+
+    const popup = screen.getByTestId("popup");
+    const editButton = within(popup).getByRole("button", { name: "Edit" });
+    fireEvent.click(editButton);
+
+    // When editingBench is set, MapPage passes canDelete/onDeleteBench to AddBenchUi.
+    const deleteBtn = await screen.findByRole("button", { name: "Delete bench" });
+    fireEvent.click(deleteBtn);
+
+    const { supabase } = await import("../lib/supabaseClient");
+    expect((supabase.from as any)).toHaveBeenCalledWith("bench_photos");
+    expect((supabase.from as any)).toHaveBeenCalledWith("benches");
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("marker")).not.toBeInTheDocument();
+    });
   });
 });
