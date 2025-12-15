@@ -92,6 +92,23 @@ const userIcon = divIcon({
 const CHOOSE_MODE_ZOOM = 16;
 const RECENTER_ZOOM = 16;
 
+function MapBridge({
+  mapRef,
+}: {
+  mapRef: React.MutableRefObject<LeafletMap | null>;
+}) {
+  const mapInstance = useMap();
+
+  useEffect(() => {
+    mapRef.current = mapInstance;
+    window.__BENCHRADAR_MAP__ = mapInstance;
+
+    return;
+  }, [mapInstance, mapRef]);
+
+  return null;
+}
+
 export function MapPage() {
   const [center, setCenter] = useState(DEFAULT_CENTER as LatLngExpression);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -128,7 +145,6 @@ export function MapPage() {
   const [previewSwipeOffset, setPreviewSwipeOffset] = useState(0);
   const [mapStyle, setMapStyle] = useState<"normal" | "satellite">("normal");
   const mapRef = useRef<LeafletMap | null>(null);
-  const popupOpenRef = useRef(false);
   const benchIconCacheRef = useRef(new Map<string, ReturnType<typeof divIcon>>());
   const selectFileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -939,16 +955,22 @@ export function MapPage() {
       if (cancelled) return;
 
       setIsAdmin(admin);
-
-      if (!cancelled) {
-        await fetchBenchesForCurrentBounds();
-      }
     })();
 
     return () => {
       cancelled = true;
     };
   }, [setBenches, user]);
+
+  useEffect(() => {
+    (async () => {
+      await fetchBenchesForCurrentBounds();
+    })();
+
+    return () => {
+      return;
+    };
+  }, [setBenches]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -967,37 +989,6 @@ export function MapPage() {
   }, [benches, isAdmin]);
 
   const mapCenter = center;
-
-  const MapBridge = () => {
-    const mapInstance = useMap();
-
-    useEffect(() => {
-      mapRef.current = mapInstance;
-
-      window.__BENCHRADAR_MAP__ = mapInstance;
-
-      void fetchBenchesForCurrentBounds(mapInstance);
-      if (!(import.meta as any).env?.VITE_E2E) {
-        const onPopupOpen = () => {
-          popupOpenRef.current = true;
-        };
-
-        const onPopupClose = () => {
-          popupOpenRef.current = false;
-        };
-
-        mapInstance.on("popupopen", onPopupOpen);
-        mapInstance.on("popupclose", onPopupClose);
-
-        return () => {
-          mapInstance.off("popupopen", onPopupOpen);
-          mapInstance.off("popupclose", onPopupClose);
-        };
-      }
-    }, [mapInstance]);
-
-    return null;
-  };
 
   const handleStartChoosingLocation = () => {
     const map = mapRef.current;
@@ -1040,7 +1031,7 @@ export function MapPage() {
         className="z-0 h-full w-full"
         ref={mapRef}
       >
-        <MapBridge />
+        <MapBridge mapRef={mapRef} />
         {mapStyle === "normal" ? (
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
