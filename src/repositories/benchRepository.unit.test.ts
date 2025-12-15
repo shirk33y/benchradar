@@ -35,4 +35,26 @@ describe("benchRepository (unit)", () => {
     expect(eqPhotos).toHaveBeenCalledWith("bench_id", "b1");
     expect(eqBench).toHaveBeenCalledWith("id", "b1");
   });
+
+  it("deleteBench returns error if delete fails", async () => {
+    const eqPhotos = vi.fn(async () => ({ error: { message: "no" } }));
+    const eqBench = vi.fn(async () => ({ error: null }));
+
+    const supabase: any = {
+      from: (table: string) => {
+        if (table === "bench_photos") {
+          return { delete: () => ({ eq: eqPhotos }) };
+        }
+        if (table === "benches") {
+          return { delete: () => ({ eq: eqBench }) };
+        }
+        throw new Error("unexpected table");
+      },
+    };
+
+    const repo = createBenchRepository(supabase);
+    const res = await repo.deleteBench({ benchId: "b1" });
+
+    expect(res.error).toBe("Deleting bench failed. Please try again.");
+  });
 });

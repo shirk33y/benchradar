@@ -127,4 +127,50 @@ describe("fetchBenchesWithPhotos (unit)", () => {
     const second = await fetchBenchesWithPhotos(supabase);
     expect(second.map((b) => b.description)).toContain("it-seed-far");
   });
+
+  it("returns [] on benches error", async () => {
+    const supabase = makeSupabaseMock([
+      {
+        benches: {
+          data: null,
+          error: { message: "fail" },
+        },
+      },
+    ]);
+
+    const benches = await fetchBenchesWithPhotos(supabase);
+    expect(benches).toEqual([]);
+  });
+
+  it("filters null photo urls and falls back to main_photo_url when no photos", async () => {
+    const supabase = makeSupabaseMock([
+      {
+        benches: {
+          data: [
+            {
+              id: "b1",
+              latitude: 1,
+              longitude: 2,
+              title: null,
+              description: null,
+              main_photo_url: "https://example.com/main.webp",
+              status: "approved",
+              created_by: null,
+            },
+          ],
+          error: null,
+        },
+        photos: {
+          data: [
+            { bench_id: "b1", url: null, is_main: true },
+            { bench_id: "b1", url: "https://example.com/p1.webp", is_main: false },
+          ],
+          error: null,
+        },
+      },
+    ]);
+
+    const benches = await fetchBenchesWithPhotos(supabase);
+    expect(benches[0].photoUrls).toEqual(["https://example.com/p1.webp"]);
+  });
 });
