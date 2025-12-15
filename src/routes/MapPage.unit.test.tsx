@@ -138,7 +138,7 @@ vi.mock("../lib/supabaseClient", () => ({
   },
 }));
 
-vi.mock("./mapBenches", () => ({
+vi.mock("../repositories/fetchBenchesWithPhotos", () => ({
   fetchBenchesWithPhotos: vi.fn(async () => [
     {
       id: "b1",

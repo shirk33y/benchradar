@@ -16,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { useBenchStore } from "../store/useBenchStore";
 import type { Bench } from "../store/useBenchStore";
 import { supabase } from "../lib/supabaseClient";
-import { fetchBenchesWithPhotos } from "./mapBenches";
+import { fetchBenchesWithPhotos } from "../repositories/fetchBenchesWithPhotos";
 import { useMapUiStore } from "../store/useMapUiStore";
 import { MapHeader } from "../components/map/MapHeader";
 import { HamburgerMenu } from "../components/map/HamburgerMenu";

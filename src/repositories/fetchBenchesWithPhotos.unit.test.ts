@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchBenchesWithPhotos } from "./mapBenches";
+import { fetchBenchesWithPhotos } from "./fetchBenchesWithPhotos";
 
 function makeSupabaseMock(responses: {
   benches: any;
