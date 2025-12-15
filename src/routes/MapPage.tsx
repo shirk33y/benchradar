@@ -1,8 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type {
-  PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent,
-} from "react";
 import {
   divIcon,
   type LatLngExpression,
@@ -11,11 +7,9 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet-edgebuffer";
-import { useNavigate } from "react-router-dom";
 
 import { useBenchStore } from "../store/useBenchStore";
 import type { Bench } from "../store/useBenchStore";
-import { supabase } from "../lib/supabaseClient";
 import { useMapStore } from "../store/useMapStore";
 import { MapHeader } from "../components/map/MapHeader";
 import { HamburgerMenu } from "../components/map/HamburgerMenu";
@@ -130,7 +124,6 @@ export function MapPage() {
   const mapRef = useRef<LeafletMap | null>(null);
   const benchIconCacheRef = useRef(new Map<string, ReturnType<typeof divIcon>>());
   const { benches, setBenches } = useBenchStore();
-  const navigate = useNavigate();
 
   useEffect(() => {
     const cleanup = initAuth();
