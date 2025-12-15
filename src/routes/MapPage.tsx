@@ -92,11 +92,7 @@ const userIcon = divIcon({
 const CHOOSE_MODE_ZOOM = 16;
 const RECENTER_ZOOM = 16;
 
-function MapBridge({
-  mapRef,
-}: {
-  mapRef: React.MutableRefObject<LeafletMap | null>;
-}) {
+function useMapBridge(mapRef: React.MutableRefObject<LeafletMap | null>) {
   const mapInstance = useMap();
 
   useEffect(() => {
@@ -105,6 +101,14 @@ function MapBridge({
 
     return;
   }, [mapInstance, mapRef]);
+}
+
+function MapBridge({
+  mapRef,
+}: {
+  mapRef: React.MutableRefObject<LeafletMap | null>;
+}) {
+  useMapBridge(mapRef);
 
   return null;
 }
