@@ -129,6 +129,7 @@ export function MapPage() {
   const [mapStyle, setMapStyle] = useState<"normal" | "satellite">("normal");
   const mapRef = useRef<LeafletMap | null>(null);
   const popupOpenRef = useRef(false);
+  const benchIconCacheRef = useRef(new Map<string, ReturnType<typeof divIcon>>());
   const selectFileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraFileInputRef = useRef<HTMLInputElement | null>(null);
   const dragFromIndexRef = useRef<number | null>(null);
@@ -836,6 +837,23 @@ export function MapPage() {
     setBenches(mappedBenches);
   };
 
+  const getBenchIcon = (bench: Bench) => {
+    const key = `${bench.id}:${bench.mainPhotoUrl ?? ""}:${bench.status}`;
+    const cached = benchIconCacheRef.current.get(key);
+    if (cached) return cached;
+
+    const icon = bench.mainPhotoUrl
+      ? createBenchPhotoIcon(bench.mainPhotoUrl, bench.status)
+      : bench.status === "pending"
+        ? pendingIcon
+        : bench.status === "rejected"
+          ? rejectedIcon
+          : approvedIcon;
+
+    benchIconCacheRef.current.set(key, icon);
+    return icon;
+  };
+
   useEffect(() => {
     const nav = navigator as Navigator & { geolocation?: Geolocation };
 
@@ -968,19 +986,12 @@ export function MapPage() {
           popupOpenRef.current = false;
         };
 
-        const onMoveEnd = () => {
-          if (popupOpenRef.current) return;
-          void fetchBenchesForCurrentBounds(mapInstance);
-        };
-
         mapInstance.on("popupopen", onPopupOpen);
         mapInstance.on("popupclose", onPopupClose);
-        mapInstance.on("moveend", onMoveEnd);
 
         return () => {
           mapInstance.off("popupopen", onPopupOpen);
           mapInstance.off("popupclose", onPopupClose);
-          mapInstance.off("moveend", onMoveEnd);
         };
       }
     }, [mapInstance]);
@@ -1084,15 +1095,7 @@ export function MapPage() {
                 key={bench.id}
                 position={[bench.latitude, bench.longitude]}
                 title={bench.description ?? bench.id}
-                icon={
-                  bench.mainPhotoUrl
-                    ? createBenchPhotoIcon(bench.mainPhotoUrl, bench.status)
-                    : bench.status === "pending"
-                    ? pendingIcon
-                    : bench.status === "rejected"
-                    ? rejectedIcon
-                    : approvedIcon
-                }
+                icon={getBenchIcon(bench)}
               >
                 <Popup
                   closeButton={false}
