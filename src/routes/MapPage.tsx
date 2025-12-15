@@ -128,6 +128,7 @@ export function MapPage() {
   const [previewSwipeOffset, setPreviewSwipeOffset] = useState(0);
   const [mapStyle, setMapStyle] = useState<"normal" | "satellite">("normal");
   const mapRef = useRef<LeafletMap | null>(null);
+  const popupOpenRef = useRef(false);
   const selectFileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraFileInputRef = useRef<HTMLInputElement | null>(null);
   const dragFromIndexRef = useRef<number | null>(null);
@@ -959,12 +960,26 @@ export function MapPage() {
 
       void fetchBenchesForCurrentBounds(mapInstance);
       if (!(import.meta as any).env?.VITE_E2E) {
+        const onPopupOpen = () => {
+          popupOpenRef.current = true;
+        };
+
+        const onPopupClose = () => {
+          popupOpenRef.current = false;
+        };
+
         const onMoveEnd = () => {
+          if (popupOpenRef.current) return;
           void fetchBenchesForCurrentBounds(mapInstance);
         };
+
+        mapInstance.on("popupopen", onPopupOpen);
+        mapInstance.on("popupclose", onPopupClose);
         mapInstance.on("moveend", onMoveEnd);
 
         return () => {
+          mapInstance.off("popupopen", onPopupOpen);
+          mapInstance.off("popupclose", onPopupClose);
           mapInstance.off("moveend", onMoveEnd);
         };
       }
