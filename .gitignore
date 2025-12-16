@@ -21,9 +21,17 @@ test-results/
 .env
 .env.*
 !.env.example
+.env.local
+.env.*.local
 
 # Editors / OS
 .DS_Store
 .idea/
 .vscode/
 *.swp
+
+# coverage
+/coverage
+
+# build output
+/dist

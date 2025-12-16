@@ -53,6 +53,8 @@ async function tryExtractGpsFromFile(file: File): Promise<LatLngTuple | null> {
       return [gps.latitude, gps.longitude];
     }
   } catch (_err) {
+    // eslint-disable-next-line no-console
+    console.error(_err);
     // ignore and try fallback parsing
   }
 
@@ -83,6 +85,8 @@ async function tryExtractGpsFromFile(file: File): Promise<LatLngTuple | null> {
       return [lat, lng];
     }
   } catch (_err) {
+    // eslint-disable-next-line no-console
+    console.error(_err);
     // no-op; fall back to manual selection
   }
 

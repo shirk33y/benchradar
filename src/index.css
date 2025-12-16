@@ -30,6 +30,12 @@
   display: none !important;
 }
 
+.leaflet-zoom-anim .leaflet-zoom-animated {
+  -webkit-transition-duration: 0.1s !important;
+  -moz-transition-duration: 0.1s !important;
+  transition-duration: 0.1s !important;
+}
+
 .popup-gallery {
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.7) transparent;

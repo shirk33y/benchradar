@@ -162,8 +162,14 @@ export function MapPage() {
   };
 
   const fetchBenchesForCurrentBounds = async (_mapOverride?: LeafletMap) => {
-    const mappedBenches = await fetchBenchesWithPhotos();
-    setBenches(mappedBenches);
+    try {
+      const mappedBenches = await fetchBenchesWithPhotos();
+      setBenches(mappedBenches);
+    } catch (_error) {
+      // eslint-disable-next-line no-console
+      console.error(_error);
+      setBenches([]);
+    }
   };
 
   const getBenchIcon = (bench: Bench) => {
