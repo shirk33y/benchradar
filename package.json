@@ -17,6 +17,7 @@
     "regen:thumbs": "node --max-old-space-size=1024 scripts/regenerate-thumbnails.mjs",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
+    "backup:supabase": "bash scripts/backup-supabase.sh",
     "test:e2e": "bash scripts/run-e2e-tests.sh",
     "trace:show": "npx playwright show-trace",
     "trace:show:last": "bash -lc 'TRACE=$(ls -t test-results/**/trace.zip 2>/dev/null | head -n 1); test -n \"${TRACE}\"; npx playwright show-trace \"${TRACE}\"'"
