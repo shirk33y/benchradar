@@ -19,6 +19,19 @@ type BenchRow = {
   created_by: string | null;
 };
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 type ProfileRow = {
   role: string | null;
 };
@@ -251,12 +264,30 @@ export async function fetchBenchesForAdminTab(args: {
 }
 
 export async function fetchBenchesWithPhotos(): Promise<Bench[]> {
-  const { data: benchesData, error: benchesError } = await supabase
+  // eslint-disable-next-line no-console
+  console.info("fetchBenchesWithPhotos: querying benches");
+
+  const benchesPromise = supabase
     .from("benches")
     .select(
       "id, latitude, longitude, title, description, main_photo_url, status, created_by",
     )
     .neq("status", "rejected");
+
+  let benchesRes: Awaited<typeof benchesPromise>;
+  try {
+    benchesRes = await withTimeout(
+      Promise.resolve(benchesPromise as any),
+      10000,
+      "supabase benches query",
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("fetchBenchesWithPhotos: benches query failed", err);
+    return [];
+  }
+
+  const { data: benchesData, error: benchesError } = benchesRes;
 
   if (benchesError || !benchesData) {
     // eslint-disable-next-line no-console
