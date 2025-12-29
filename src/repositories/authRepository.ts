@@ -26,6 +26,10 @@ export async function signInWithGoogle(args: { redirectTo: string }) {
   });
 }
 
-export async function signOut() {
-  return supabase.auth.signOut();
+export async function signOut(args?: { scope?: "local" | "global" | "others" }) {
+  return supabase.auth.signOut(args);
+}
+
+export async function signOutLocal() {
+  return supabase.auth.signOut({ scope: "local" });
 }

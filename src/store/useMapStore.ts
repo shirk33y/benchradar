@@ -11,6 +11,7 @@ import {
   signInWithGoogle,
   signInWithPassword,
   signOut,
+  signOutLocal,
 } from "../repositories/authRepository";
 
 export type AddMode = "idle" | "choosing-location" | "details";
@@ -191,12 +192,30 @@ export const useMapStore = create<MapStoreState>()(
       }),
 
     handleSignOut: async () => {
-      await signOut();
       set((state) => {
         state.user = null;
         state.isAdmin = false;
         state.isMenuOpen = false;
       });
+
+      const timeoutMs = 3000;
+      try {
+        await Promise.race([
+          signOut(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("signOut timeout")), timeoutMs)
+          ),
+        ]);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("signOut failed, falling back to local sign out", err);
+        try {
+          await signOutLocal();
+        } catch (err2) {
+          // eslint-disable-next-line no-console
+          console.warn("signOutLocal failed", err2);
+        }
+      }
     },
 
     handleAuthSubmit: async (e: FormEvent) => {
