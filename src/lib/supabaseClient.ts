@@ -16,6 +16,12 @@ if (!import.meta.env.DEV) {
   }
 }
 
+// eslint-disable-next-line no-console
+console.info("Supabase init", {
+  url: supabaseUrl,
+  mode: import.meta.env.DEV ? "dev" : "prod",
+});
+
 const storage = typeof window !== "undefined" ? window.localStorage : undefined;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
