@@ -55,7 +55,37 @@ const storage =
       }
     : undefined;
 
+async function tracedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+  // eslint-disable-next-line no-console
+  console.info("Supabase fetch", {
+    method: init?.method ?? "GET",
+    url,
+  });
+
+  const controller = new AbortController();
+  const timeoutMs = 15000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(input, {
+      ...init,
+      signal: init?.signal ?? controller.signal,
+    });
+    return res;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("Supabase fetch failed", { url }, err);
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: {
+    fetch: tracedFetch,
+  },
   auth: {
     flowType: "pkce",
     persistSession: !import.meta.env.DEV,
