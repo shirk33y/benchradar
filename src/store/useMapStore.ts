@@ -208,9 +208,15 @@ export const useMapStore = create<MapStoreState>()(
         ]);
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.warn("signOut failed, falling back to local sign out", err);
+        console.warn("signOut failed or timed out", err);
+      } finally {
         try {
-          await signOutLocal();
+          await Promise.race([
+            signOutLocal(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("signOutLocal timeout")), timeoutMs)
+            ),
+          ]);
         } catch (err2) {
           // eslint-disable-next-line no-console
           console.warn("signOutLocal failed", err2);
