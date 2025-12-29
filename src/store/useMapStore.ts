@@ -232,7 +232,7 @@ export const useMapStore = create<MapStoreState>()(
       });
 
       const { error } = await signInWithGoogle({
-        redirectTo: `${window.location.origin}`,
+        redirectTo: `${window.location.origin}/auth/callback`,
       });
 
       if (error) {

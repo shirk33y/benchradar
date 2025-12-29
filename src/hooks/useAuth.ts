@@ -102,7 +102,7 @@ export function useAuth() {
     setAuthError(null);
     setAuthLoading(true);
     const { error } = await signInWithGoogle({
-      redirectTo: `${window.location.origin}`,
+      redirectTo: `${window.location.origin}/auth/callback`,
     });
     if (error) {
       setAuthError("Google sign-in failed. Please try again.");
