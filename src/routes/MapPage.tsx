@@ -163,7 +163,13 @@ export function MapPage() {
 
   const fetchBenchesForCurrentBounds = async (_mapOverride?: LeafletMap) => {
     try {
+      // eslint-disable-next-line no-console
+      console.info("fetchBenchesForCurrentBounds: start");
       const mappedBenches = await fetchBenchesWithPhotos();
+      // eslint-disable-next-line no-console
+      console.info("fetchBenchesForCurrentBounds: done", {
+        count: mappedBenches.length,
+      });
       setBenches(mappedBenches);
     } catch (_error) {
       // eslint-disable-next-line no-console
