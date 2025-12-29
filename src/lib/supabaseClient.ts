@@ -29,13 +29,23 @@ if (typeof window !== "undefined") {
     // Defensive cleanup: Supabase auth uses localStorage-based locks and PKCE verifier keys.
     // In some preview/privacy contexts these can get stuck and block auth.getSession() forever.
     try {
+      const href = window.location.href;
+      const currentUrl = new URL(href);
+      const hasAuthCode = currentUrl.searchParams.has("code");
+      const isAuthCallbackRoute = currentUrl.pathname.startsWith("/auth/callback");
+      const preservePkce = hasAuthCode || isAuthCallbackRoute;
+
       const keysToDelete: string[] = [];
       for (let i = 0; i < window.localStorage.length; i += 1) {
         const k = window.localStorage.key(i);
         if (!k) continue;
         const lower = k.toLowerCase();
         if (!k.startsWith("benchradar-auth")) continue;
-        if (lower.includes("lock") || lower.includes("code-verifier") || lower.includes("pkce")) {
+        if (lower.includes("lock")) {
+          keysToDelete.push(k);
+          continue;
+        }
+        if (!preservePkce && (lower.includes("code-verifier") || lower.includes("pkce"))) {
           keysToDelete.push(k);
         }
       }
