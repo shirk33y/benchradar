@@ -20,6 +20,7 @@ import { FullImagePreview } from "../components/map/FullImagePreview";
 import { BenchPopup } from "../components/map/BenchPopup";
 import { fetchBenchesWithPhotos } from "../repositories/benchRepository";
 import { toThumbnailUrl } from "../lib/imageProcessing";
+import { supabase } from "../lib/supabaseClient";
 
 const DEFAULT_CENTER: LatLngExpression = [52.2297, 21.0122]; // Warsaw as a neutral default
 
@@ -121,6 +122,7 @@ export function MapPage() {
   } = useMapStore();
 
   const [mapStyle, setMapStyle] = useState<"normal" | "satellite">("normal");
+  const [oauthExchangeDone, setOauthExchangeDone] = useState(true);
   const mapRef = useRef<LeafletMap | null>(null);
   const benchIconCacheRef = useRef(new Map<string, ReturnType<typeof divIcon>>());
   const { benches, setBenches } = useBenchStore();
@@ -129,6 +131,40 @@ export function MapPage() {
     const cleanup = initAuth();
     return () => cleanup?.();
   }, [initAuth]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+      if (!code) {
+        if (!cancelled) setOauthExchangeDone(true);
+        return;
+      }
+
+      if (!cancelled) setOauthExchangeDone(false);
+
+      try {
+        const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error("oauth exchange failed on /", error);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("oauth exchange exception on /", err);
+      } finally {
+        url.searchParams.delete("code");
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+        if (!cancelled) setOauthExchangeDone(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const {
     previewState,
@@ -226,13 +262,14 @@ export function MapPage() {
 
   useEffect(() => {
     (async () => {
+      if (!oauthExchangeDone) return;
       await fetchBenchesForCurrentBounds();
     })();
 
     return () => {
       return;
     };
-  }, [setBenches]);
+  }, [setBenches, oauthExchangeDone]);
 
   const mapCenter = center;
 
