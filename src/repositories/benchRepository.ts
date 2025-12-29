@@ -267,6 +267,19 @@ export async function fetchBenchesWithPhotos(): Promise<Bench[]> {
   // eslint-disable-next-line no-console
   console.info("fetchBenchesWithPhotos: querying benches");
 
+  try {
+    const sessionRes = await withTimeout(
+      supabase.auth.getSession() as unknown as Promise<unknown>,
+      3000,
+      "supabase auth.getSession",
+    );
+    // eslint-disable-next-line no-console
+    console.info("fetchBenchesWithPhotos: session check ok", sessionRes);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("fetchBenchesWithPhotos: session check failed", err);
+  }
+
   const benchesPromise = supabase
     .from("benches")
     .select(
@@ -276,8 +289,10 @@ export async function fetchBenchesWithPhotos(): Promise<Bench[]> {
 
   let benchesRes: Awaited<typeof benchesPromise>;
   try {
+    // eslint-disable-next-line no-console
+    console.info("fetchBenchesWithPhotos: awaiting benches query");
     benchesRes = await withTimeout(
-      Promise.resolve(benchesPromise as any),
+      new Promise((resolve, reject) => (benchesPromise as any).then(resolve, reject)) as any,
       10000,
       "supabase benches query",
     );
@@ -286,6 +301,9 @@ export async function fetchBenchesWithPhotos(): Promise<Bench[]> {
     console.error("fetchBenchesWithPhotos: benches query failed", err);
     return [];
   }
+
+  // eslint-disable-next-line no-console
+  console.info("fetchBenchesWithPhotos: benches query resolved");
 
   const { data: benchesData, error: benchesError } = benchesRes;
 
