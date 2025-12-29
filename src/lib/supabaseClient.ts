@@ -22,7 +22,38 @@ console.info("Supabase init", {
   mode: import.meta.env.DEV ? "dev" : "prod",
 });
 
-const storage = typeof window !== "undefined" ? window.localStorage : undefined;
+const memoryStorage = new Map<string, string>();
+
+const storage =
+  typeof window !== "undefined"
+    ? {
+        getItem: (key: string) => {
+          try {
+            const v = window.localStorage.getItem(key);
+            if (v !== null) return v;
+          } catch {
+            // ignore
+          }
+          return memoryStorage.get(key) ?? null;
+        },
+        setItem: (key: string, value: string) => {
+          memoryStorage.set(key, value);
+          try {
+            window.localStorage.setItem(key, value);
+          } catch {
+            // ignore
+          }
+        },
+        removeItem: (key: string) => {
+          memoryStorage.delete(key);
+          try {
+            window.localStorage.removeItem(key);
+          } catch {
+            // ignore
+          }
+        },
+      }
+    : undefined;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

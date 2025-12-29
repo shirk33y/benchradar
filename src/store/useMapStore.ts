@@ -113,7 +113,14 @@ export const useMapStore = create<MapStoreState>()(
       let cancelled = false;
 
       void (async () => {
-        const u = await getCurrentUser();
+        let u: User | null = null;
+        try {
+          u = await getCurrentUser();
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("initAuth.getCurrentUser failed", err);
+          return;
+        }
         if (cancelled) return;
 
         set((state) => {
