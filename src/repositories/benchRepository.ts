@@ -1,6 +1,7 @@
 import type { Bench } from "../store/useBenchStore";
 import { supabase } from "../lib/supabaseClient";
 import { convertToWebp } from "../lib/imageProcessing";
+import { scoreBenchProbability } from "../lib/benchDetectorClient";
 
 type BenchPhotoRow = {
   bench_id: string;
@@ -192,9 +193,31 @@ export async function uploadPendingBenchPhotos(args: {
   const { ownerId, files } = args;
   const uploadedUrls: string[] = [];
 
+  const detectorUrl = (import.meta as any).env?.VITE_BENCH_DETECTOR_URL as string | undefined;
+  const minProbRaw = (import.meta as any).env?.VITE_BENCH_DETECTOR_MIN_PROB as string | undefined;
+  const minProb = minProbRaw ? Number(minProbRaw) : null;
+
   for (const file of files) {
     const largeWebp = await convertToWebp(file, 900);
     const thumbWebp = await convertToWebp(file, 48);
+
+    if (detectorUrl) {
+      try {
+        const res = await scoreBenchProbability({ baseUrl: detectorUrl, file: largeWebp });
+        const threshold = typeof minProb === "number" && !Number.isNaN(minProb) ? minProb : 0.5;
+        if (res.probability < threshold) {
+          return {
+            urls: [],
+            error: `Photo validation failed (bench prob ${(res.probability * 100).toFixed(0)}% < ${(threshold * 100).toFixed(0)}%).`,
+          };
+        }
+      } catch (_err) {
+        return {
+          urls: [],
+          error: "Photo validation failed (bench detector unreachable). Please try again.",
+        };
+      }
+    }
 
     const id = crypto.randomUUID();
     const { publicUrl, error } = await uploadBenchPhotoPair({
