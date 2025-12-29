@@ -27,6 +27,7 @@ export type MapStoreState = {
   // Auth state
   user: User | null;
   isAdmin: boolean;
+  authInitialized: boolean;
   authEmail: string;
   authPassword: string;
   authError: string | null;
@@ -66,6 +67,7 @@ export const useMapStore = create<MapStoreState>()(
   immer((set) => ({
     user: null,
     isAdmin: false,
+    authInitialized: false,
     authEmail: "",
     authPassword: "",
     authError: null,
@@ -126,6 +128,7 @@ export const useMapStore = create<MapStoreState>()(
 
         set((state) => {
           state.user = u;
+          state.authInitialized = true;
         });
 
         if (!u) {
@@ -149,6 +152,7 @@ export const useMapStore = create<MapStoreState>()(
 
         set((state) => {
           state.user = nextUser;
+          state.authInitialized = true;
         });
 
         if (!nextUser) {

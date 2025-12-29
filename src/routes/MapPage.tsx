@@ -114,6 +114,7 @@ export function MapPage() {
     initAuth,
     user,
     isAdmin,
+    authInitialized,
     openSignIn,
     center,
     setCenter,
@@ -138,10 +139,7 @@ export function MapPage() {
     (async () => {
       const url = new URL(window.location.href);
       const code = url.searchParams.get("code");
-      if (!code) {
-        if (!cancelled) setOauthExchangeDone(true);
-        return;
-      }
+      if (!code) return;
 
       if (!cancelled) setOauthExchangeDone(false);
 
@@ -263,13 +261,14 @@ export function MapPage() {
   useEffect(() => {
     (async () => {
       if (!oauthExchangeDone) return;
+      if (!authInitialized) return;
       await fetchBenchesForCurrentBounds();
     })();
 
     return () => {
       return;
     };
-  }, [setBenches, oauthExchangeDone]);
+  }, [setBenches, oauthExchangeDone, authInitialized]);
 
   const mapCenter = center;
 
