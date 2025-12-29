@@ -224,6 +224,23 @@ export const useMapStore = create<MapStoreState>()(
         } catch (err2) {
           // eslint-disable-next-line no-console
           console.warn("signOutLocal failed", err2);
+
+          try {
+            if (typeof window !== "undefined") {
+              const keys: string[] = [];
+              for (let i = 0; i < window.localStorage.length; i += 1) {
+                const k = window.localStorage.key(i);
+                if (k && k.startsWith("benchradar-auth")) keys.push(k);
+              }
+              for (const k of keys) window.localStorage.removeItem(k);
+              // eslint-disable-next-line no-console
+              console.warn("Forced local auth purge", keys);
+              window.location.reload();
+            }
+          } catch (err3) {
+            // eslint-disable-next-line no-console
+            console.warn("Forced local auth purge failed", err3);
+          }
         }
       }
     },
