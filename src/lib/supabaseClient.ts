@@ -57,6 +57,7 @@ const storage =
 
 async function tracedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+  const startMs = Date.now();
   // eslint-disable-next-line no-console
   console.info("Supabase fetch", {
     method: init?.method ?? "GET",
@@ -65,20 +66,52 @@ async function tracedFetch(input: RequestInfo | URL, init?: RequestInit): Promis
 
   const controller = new AbortController();
   const timeoutMs = 15000;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const externalSignal = init?.signal;
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
 
   try {
     const res = await fetch(input, {
       ...init,
-      signal: init?.signal ?? controller.signal,
+      signal: controller.signal,
+    });
+
+    const durationMs = Date.now() - startMs;
+    // eslint-disable-next-line no-console
+    console.info("Supabase fetch done", {
+      method: init?.method ?? "GET",
+      url,
+      status: res.status,
+      ok: res.ok,
+      durationMs,
     });
     return res;
   } catch (err) {
+    const durationMs = Date.now() - startMs;
     // eslint-disable-next-line no-console
-    console.error("Supabase fetch failed", { url }, err);
+    console.error(
+      timedOut ? "Supabase fetch timed out" : "Supabase fetch failed",
+      { url, durationMs },
+      err
+    );
     throw err;
   } finally {
     clearTimeout(timeoutId);
+    if (externalSignal && !externalSignal.aborted) {
+      externalSignal.removeEventListener("abort", onExternalAbort);
+    }
   }
 }
 
