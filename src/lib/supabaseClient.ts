@@ -24,6 +24,26 @@ console.info("Supabase init", {
 
 const storage = typeof window !== "undefined" ? window.localStorage : undefined;
 
+if (typeof window !== "undefined") {
+  try {
+    const raw = window.localStorage.getItem("benchradar-auth");
+    if (raw) {
+      // eslint-disable-next-line no-console
+      console.info("Supabase auth storage", { key: "benchradar-auth", bytes: raw.length });
+      try {
+        JSON.parse(raw);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("Supabase auth storage is invalid JSON; clearing", err);
+        window.localStorage.removeItem("benchradar-auth");
+      }
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("Supabase auth storage check failed", err);
+  }
+}
+
 async function tracedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
   const startMs = Date.now();
