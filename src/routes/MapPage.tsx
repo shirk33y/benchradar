@@ -141,9 +141,33 @@ export function MapPage() {
       const code = url.searchParams.get("code");
       if (!code) return;
 
+      const hasVerifier = (() => {
+        try {
+          if (typeof window === "undefined") return false;
+          for (let i = 0; i < window.localStorage.length; i += 1) {
+            const k = window.localStorage.key(i);
+            if (!k) continue;
+            const lower = k.toLowerCase();
+            if (!k.startsWith("benchradar-auth")) continue;
+            if (lower.includes("code-verifier") || lower.includes("pkce")) return true;
+          }
+        } catch {
+          return false;
+        }
+        return false;
+      })();
+
       if (!cancelled) setOauthExchangeDone(false);
 
       try {
+        if (!hasVerifier) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "oauth exchange skipped on /: missing PKCE verifier (likely after local auth purge)"
+          );
+          return;
+        }
+
         const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
         if (error) {
           // eslint-disable-next-line no-console
