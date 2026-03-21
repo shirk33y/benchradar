@@ -35,3 +35,6 @@ test-results/
 
 # build output
 /dist
+
+# backups
+/backups
