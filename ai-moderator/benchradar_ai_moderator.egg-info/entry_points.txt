@@ -1,0 +1,2 @@
+[console_scripts]
+bench-prob = ai_moderator.cli:main
