@@ -13,7 +13,7 @@ jobs:
         id: insert
         run: |
           random_name=$(cat /proc/sys/kernel/random/uuid)
-          response=$(curl -sf -X POST \
+          response=$(curl -s -X POST \
             -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
             -H "Content-Type: application/json" \
