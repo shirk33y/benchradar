@@ -9,10 +9,29 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase (query approved benches)
+      - name: Insert row into keep_alive
+        id: insert
         run: |
-          response=$(curl -sf \
+          random_name=$(cat /proc/sys/kernel/random/uuid)
+          response=$(curl -sf -X POST \
             -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/benches?select=id&status=eq.approved&limit=1")
-          echo "Ping successful: $response"
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=representation" \
+            -d "{\"name\": \"$random_name\"}" \
+            "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/keep_alive")
+          echo "Inserted: $response"
+          inserted_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+          echo "inserted_id=$inserted_id" >> $GITHUB_OUTPUT
+
+      - name: Delete row from keep_alive
+        run: |
+          if [ -n "${{ steps.insert.outputs.inserted_id }}" ]; then
+            curl -sf -X DELETE \
+              -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+              -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+              "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/keep_alive?id=eq.${{ steps.insert.outputs.inserted_id }}"
+            echo "Deleted row ${{ steps.insert.outputs.inserted_id }}"
+          else
+            echo "No inserted_id found, skipping delete"
+          fi
