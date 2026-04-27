@@ -15,17 +15,19 @@ jobs:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
+          ANON_KEY=$(echo "$SUPABASE_ANON_KEY" | tr -d '\n\r')
+          BASE_URL=$(echo "$SUPABASE_URL" | tr -d '\n\r')
           random_name=$(uuidgen)
           payload=$(printf '{"name":"%s"}' "$random_name")
           echo "Payload: $payload"
-          echo "$payload" > /tmp/payload.json
-          response=$(curl -sv -X POST \
-            -H "apikey: $SUPABASE_ANON_KEY" \
-            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+          printf '%s' "$payload" > /tmp/payload.json
+          response=$(curl -s --http1.1 -X POST \
+            -H "apikey: $ANON_KEY" \
+            -H "Authorization: Bearer $ANON_KEY" \
             -H "Content-Type: application/json" \
             -H "Prefer: return=representation" \
-            --data @/tmp/payload.json \
-            "$SUPABASE_URL/rest/v1/keep_alive" 2>&1)
+            --data-binary @/tmp/payload.json \
+            "$BASE_URL/rest/v1/keep_alive")
           echo "Inserted: $response"
           inserted_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
           if [ -z "$inserted_id" ]; then
@@ -39,8 +41,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
-          curl -sf -X DELETE \
-            -H "apikey: $SUPABASE_ANON_KEY" \
-            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
-            "$SUPABASE_URL/rest/v1/keep_alive?id=eq.${{ steps.insert.outputs.inserted_id }}"
+          ANON_KEY=$(echo "$SUPABASE_ANON_KEY" | tr -d '\n\r')
+          BASE_URL=$(echo "$SUPABASE_URL" | tr -d '\n\r')
+          curl -sf --http1.1 -X DELETE \
+            -H "apikey: $ANON_KEY" \
+            -H "Authorization: Bearer $ANON_KEY" \
+            "$BASE_URL/rest/v1/keep_alive?id=eq.${{ steps.insert.outputs.inserted_id }}"
           echo "Deleted row ${{ steps.insert.outputs.inserted_id }}"
