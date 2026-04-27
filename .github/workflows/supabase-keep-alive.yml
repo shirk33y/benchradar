@@ -12,8 +12,9 @@ jobs:
       - name: Insert row into keep_alive
         id: insert
         run: |
-          random_name=$(cat /proc/sys/kernel/random/uuid)
+          random_name=$(uuidgen)
           payload=$(printf '{"name":"%s"}' "$random_name")
+          echo "Payload: $payload"
           response=$(curl -s -X POST \
             -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
