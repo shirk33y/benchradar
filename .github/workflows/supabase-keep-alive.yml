@@ -13,12 +13,13 @@ jobs:
         id: insert
         run: |
           random_name=$(cat /proc/sys/kernel/random/uuid)
+          payload=$(printf '{"name":"%s"}' "$random_name")
           response=$(curl -s -X POST \
             -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
             -H "Content-Type: application/json" \
             -H "Prefer: return=representation" \
-            -d "{\"name\": \"$random_name\"}" \
+            -d "$payload" \
             "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/keep_alive")
           echo "Inserted: $response"
           inserted_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
