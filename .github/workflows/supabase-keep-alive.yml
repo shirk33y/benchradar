@@ -18,13 +18,14 @@ jobs:
           random_name=$(uuidgen)
           payload=$(printf '{"name":"%s"}' "$random_name")
           echo "Payload: $payload"
-          response=$(curl -s -X POST \
+          echo "$payload" > /tmp/payload.json
+          response=$(curl -sv -X POST \
             -H "apikey: $SUPABASE_ANON_KEY" \
             -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
             -H "Content-Type: application/json" \
             -H "Prefer: return=representation" \
-            -d "$payload" \
-            "$SUPABASE_URL/rest/v1/keep_alive")
+            --data @/tmp/payload.json \
+            "$SUPABASE_URL/rest/v1/keep_alive" 2>&1)
           echo "Inserted: $response"
           inserted_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
           if [ -z "$inserted_id" ]; then
