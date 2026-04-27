@@ -11,17 +11,20 @@ jobs:
     steps:
       - name: Insert row into keep_alive
         id: insert
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           random_name=$(uuidgen)
           payload=$(printf '{"name":"%s"}' "$random_name")
           echo "Payload: $payload"
-          response=$(curl -s -X POST \
-            -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+          response=$(curl -sf -X POST \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
             -H "Content-Type: application/json" \
             -H "Prefer: return=representation" \
             -d "$payload" \
-            "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/keep_alive")
+            "$SUPABASE_URL/rest/v1/keep_alive")
           echo "Inserted: $response"
           inserted_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
           if [ -z "$inserted_id" ]; then
@@ -31,9 +34,12 @@ jobs:
           echo "inserted_id=$inserted_id" >> $GITHUB_OUTPUT
 
       - name: Delete row from keep_alive
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           curl -sf -X DELETE \
-            -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/keep_alive?id=eq.${{ steps.insert.outputs.inserted_id }}"
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/keep_alive?id=eq.${{ steps.insert.outputs.inserted_id }}"
           echo "Deleted row ${{ steps.insert.outputs.inserted_id }}"
