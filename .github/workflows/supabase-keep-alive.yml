@@ -18,7 +18,7 @@ jobs:
           random_name=$(uuidgen)
           payload=$(printf '{"name":"%s"}' "$random_name")
           echo "Payload: $payload"
-          response=$(curl -sf -X POST \
+          response=$(curl -s -X POST \
             -H "apikey: $SUPABASE_ANON_KEY" \
             -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
             -H "Content-Type: application/json" \
