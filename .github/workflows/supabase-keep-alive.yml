@@ -19,7 +19,6 @@ jobs:
           BASE_URL=$(echo "$SUPABASE_URL" | tr -d '\n\r')
           random_name=$(uuidgen)
           payload=$(printf '{"name":"%s"}' "$random_name")
-          echo "Payload: $payload"
           printf '%s' "$payload" > /tmp/payload.json
           response=$(curl -s --http1.1 -X POST \
             -H "apikey: $ANON_KEY" \
