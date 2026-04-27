@@ -23,16 +23,16 @@ jobs:
             "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/keep_alive")
           echo "Inserted: $response"
           inserted_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+          if [ -z "$inserted_id" ]; then
+            echo "Insert failed, no id returned"
+            exit 1
+          fi
           echo "inserted_id=$inserted_id" >> $GITHUB_OUTPUT
 
       - name: Delete row from keep_alive
         run: |
-          if [ -n "${{ steps.insert.outputs.inserted_id }}" ]; then
-            curl -sf -X DELETE \
-              -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-              -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-              "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/keep_alive?id=eq.${{ steps.insert.outputs.inserted_id }}"
-            echo "Deleted row ${{ steps.insert.outputs.inserted_id }}"
-          else
-            echo "No inserted_id found, skipping delete"
-          fi
+          curl -sf -X DELETE \
+            -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            "${{ secrets.VITE_SUPABASE_URL }}/rest/v1/keep_alive?id=eq.${{ steps.insert.outputs.inserted_id }}"
+          echo "Deleted row ${{ steps.insert.outputs.inserted_id }}"
