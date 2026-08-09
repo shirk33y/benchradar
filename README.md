@@ -1,3 +1,5 @@
+<!-- project-index-summary: BenchRadar – PWA for discovering nearby benches on a map (OpenStreetMap/Google), with Supabase backend and Deno + React + Tailwind + Zustand. -->
+
 # BenchRadar
 
 BenchRadar is a small location-based web app and PWA for discovering nearby benches (places to sit) on a map. It is designed primarily to be installed as a web shortcut on iOS ("Add to Home Screen"), but works as a regular mobile-first website as well.
